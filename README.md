@@ -2,6 +2,8 @@
 
 A Go library for parsing, validating, and generating [Arazzo 1.0](https://spec.openapis.org/arazzo/v1.0.0) documents. Arazzo is an OpenAPI Initiative specification for describing workflows that span multiple APIs.
 
+[![GoDoc](https://godoc.org/github.com/genelet/arazzo?status.svg)](https://godoc.org/github.com/genelet/arazzo)
+
 ## Installation
 
 ```bash
