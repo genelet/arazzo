@@ -8,16 +8,16 @@ import (
 // as referenced by operationId or operationPath.
 type RequestBody struct {
 	// ContentType is the Content-Type for the request content.
-	ContentType string `json:"contentType,omitempty"`
+	ContentType string `json:"contentType,omitempty" yaml:"contentType,omitempty" hcl:"contentType,optional"`
 
 	// Payload is the actual payload (can be any JSON value).
-	Payload any `json:"payload,omitempty"`
+	Payload any `json:"payload,omitempty" yaml:"payload,omitempty" hcl:"payload,optional"`
 
 	// Replacements is a list of locations and values to set within a payload.
-	Replacements []*PayloadReplacement `json:"replacements,omitempty"`
+	Replacements []*PayloadReplacement `json:"replacements,omitempty" yaml:"replacements,omitempty" hcl:"replacement,block"`
 
 	// Extensions contains specification extensions (x-*)
-	Extensions map[string]any `json:"-"`
+	Extensions map[string]any `json:"-" yaml:"-" hcl:"-"`
 }
 
 type requestBodyAlias RequestBody
@@ -56,13 +56,13 @@ func (r RequestBody) MarshalJSON() ([]byte, error) {
 type PayloadReplacement struct {
 	// Target is a JSON Pointer or XPath Expression which MUST be resolved
 	// against the request body (required).
-	Target string `json:"target"`
+	Target string `json:"target" yaml:"target" hcl:"target"`
 
 	// Value is the value set within the target location (required).
-	Value string `json:"value"`
+	Value string `json:"value" yaml:"value" hcl:"value"`
 
 	// Extensions contains specification extensions (x-*)
-	Extensions map[string]any `json:"-"`
+	Extensions map[string]any `json:"-" yaml:"-" hcl:"-"`
 }
 
 type payloadReplacementAlias PayloadReplacement

@@ -7,21 +7,21 @@ import (
 // Info provides metadata about the Arazzo description.
 type Info struct {
 	// Title is a human readable title of the Arazzo Description (required)
-	Title string `json:"title"`
+	Title string `json:"title" yaml:"title" hcl:"title"`
 
 	// Summary is a short summary of the Arazzo Description
-	Summary string `json:"summary,omitempty"`
+	Summary string `json:"summary,omitempty" yaml:"summary,omitempty" hcl:"summary,optional"`
 
 	// Description of the purpose of the workflows defined.
 	// CommonMark syntax MAY be used for rich text representation.
-	Description string `json:"description,omitempty"`
+	Description string `json:"description,omitempty" yaml:"description,omitempty" hcl:"description,optional"`
 
 	// Version is the version identifier of the Arazzo document (required)
 	// This is distinct from the Arazzo Specification version.
-	Version string `json:"version"`
+	Version string `json:"version" yaml:"version" hcl:"version"`
 
 	// Extensions contains specification extensions (x-*)
-	Extensions map[string]any `json:"-"`
+	Extensions map[string]any `json:"-" yaml:"-" hcl:"-"`
 }
 
 type infoAlias Info

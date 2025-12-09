@@ -8,48 +8,48 @@ import (
 // (OpenAPI Operation Object or another Workflow Object).
 type Step struct {
 	// StepId is a unique string to represent the step (required)
-	StepId string `json:"stepId"`
+	StepId string `json:"stepId" yaml:"stepId" hcl:"stepId,label"`
 
 	// Description of the step. CommonMark syntax MAY be used for rich text representation.
-	Description string `json:"description,omitempty"`
+	Description string `json:"description,omitempty" yaml:"description,omitempty" hcl:"description,optional"`
 
 	// OperationId is the name of an existing, resolvable operation,
 	// as defined with a unique operationId and existing within one of the sourceDescriptions.
 	// Mutually exclusive with OperationPath and WorkflowId.
-	OperationId string `json:"operationId,omitempty"`
+	OperationId string `json:"operationId,omitempty" yaml:"operationId,omitempty" hcl:"operationId,optional"`
 
 	// OperationPath is a reference to a Source combined with a JSON Pointer to reference an operation.
 	// Mutually exclusive with OperationId and WorkflowId.
-	OperationPath string `json:"operationPath,omitempty"`
+	OperationPath string `json:"operationPath,omitempty" yaml:"operationPath,omitempty" hcl:"operationPath,optional"`
 
 	// WorkflowId is the workflowId referencing an existing workflow within the Arazzo description.
 	// Mutually exclusive with OperationId and OperationPath.
-	WorkflowId string `json:"workflowId,omitempty"`
+	WorkflowId string `json:"workflowId,omitempty" yaml:"workflowId,omitempty" hcl:"workflowId,optional"`
 
 	// Parameters is a list of parameters that MUST be passed to an operation or workflow
 	// as referenced by operationId, operationPath, or workflowId.
 	// The schema varies based on whether the target is an operation (requires "in") or workflow.
-	Parameters []any `json:"parameters,omitempty"`
+	Parameters []any `json:"parameters,omitempty" yaml:"parameters,omitempty" hcl:"parameters,optional"`
 
 	// RequestBody is the request body to pass to an operation.
-	RequestBody *RequestBody `json:"requestBody,omitempty"`
+	RequestBody *RequestBody `json:"requestBody,omitempty" yaml:"requestBody,omitempty" hcl:"requestBody,block"`
 
 	// SuccessCriteria is a list of assertions to determine the success of the step.
-	SuccessCriteria []*Criterion `json:"successCriteria,omitempty"`
+	SuccessCriteria []*Criterion `json:"successCriteria,omitempty" yaml:"successCriteria,omitempty" hcl:"successCriterion,block"`
 
 	// OnSuccess is an array of success action objects that specify what to do upon step success.
-	OnSuccess []*SuccessActionOrReusable `json:"onSuccess,omitempty"`
+	OnSuccess []*SuccessActionOrReusable `json:"onSuccess,omitempty" yaml:"onSuccess,omitempty" hcl:"onSuccess,block"`
 
 	// OnFailure is an array of failure action objects that specify what to do upon step failure.
-	OnFailure []*FailureActionOrReusable `json:"onFailure,omitempty"`
+	OnFailure []*FailureActionOrReusable `json:"onFailure,omitempty" yaml:"onFailure,omitempty" hcl:"onFailure,block"`
 
 	// Outputs is a map between a friendly name and a dynamic output value
 	// defined using a runtime expression.
 	// Pattern for keys: ^[a-zA-Z0-9\.\-_]+$
-	Outputs map[string]string `json:"outputs,omitempty"`
+	Outputs map[string]string `json:"outputs,omitempty" yaml:"outputs,omitempty" hcl:"outputs,optional"`
 
 	// Extensions contains specification extensions (x-*)
-	Extensions map[string]any `json:"-"`
+	Extensions map[string]any `json:"-" yaml:"-" hcl:"-"`
 }
 
 type stepAlias Step

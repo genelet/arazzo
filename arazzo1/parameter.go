@@ -24,18 +24,18 @@ const (
 // Parameter describes a single step parameter.
 type Parameter struct {
 	// Name is the name of the parameter (required)
-	Name string `json:"name"`
+	Name string `json:"name" yaml:"name" hcl:"name,label"`
 
 	// In is the named location of the parameter (path, query, header, cookie).
 	// Required when used in operation steps.
-	In ParameterIn `json:"in,omitempty"`
+	In ParameterIn `json:"in,omitempty" yaml:"in,omitempty" hcl:"in,optional"`
 
 	// Value is the value to pass in the parameter (required).
 	// Can be string, boolean, object, array, number, or null.
-	Value any `json:"value"`
+	Value any `json:"value" yaml:"value" hcl:"value"`
 
 	// Extensions contains specification extensions (x-*)
-	Extensions map[string]any `json:"-"`
+	Extensions map[string]any `json:"-" yaml:"-" hcl:"-"`
 }
 
 type parameterAlias Parameter

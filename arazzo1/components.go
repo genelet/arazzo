@@ -10,19 +10,19 @@ import (
 type Components struct {
 	// Inputs is an object to hold reusable JSON Schema 2020-12 schemas
 	// to be referenced from workflow inputs.
-	Inputs map[string]any `json:"inputs,omitempty"`
+	Inputs map[string]any `json:"inputs,omitempty" yaml:"inputs,omitempty" hcl:"inputs,optional"`
 
 	// Parameters is an object to hold reusable Parameter Objects.
-	Parameters map[string]*Parameter `json:"parameters,omitempty"`
+	Parameters map[string]*Parameter `json:"parameters,omitempty" yaml:"parameters,omitempty" hcl:"parameter,block"`
 
 	// SuccessActions is an object to hold reusable Success Actions Objects.
-	SuccessActions map[string]*SuccessAction `json:"successActions,omitempty"`
+	SuccessActions map[string]*SuccessAction `json:"successActions,omitempty" yaml:"successActions,omitempty" hcl:"successAction,block"`
 
 	// FailureActions is an object to hold reusable Failure Actions Objects.
-	FailureActions map[string]*FailureAction `json:"failureActions,omitempty"`
+	FailureActions map[string]*FailureAction `json:"failureActions,omitempty" yaml:"failureActions,omitempty" hcl:"failureAction,block"`
 
 	// Extensions contains specification extensions (x-*)
-	Extensions map[string]any `json:"-"`
+	Extensions map[string]any `json:"-" yaml:"-" hcl:"-"`
 }
 
 var componentsKnownFields = []string{

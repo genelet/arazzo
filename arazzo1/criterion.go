@@ -26,22 +26,22 @@ const (
 // Success Action Object criteria, and Failure Action Object criteria.
 type Criterion struct {
 	// Context is a runtime expression used to set the context for the condition to be applied on.
-	Context string `json:"context,omitempty"`
+	Context string `json:"context,omitempty" yaml:"context,omitempty" hcl:"context,optional"`
 
 	// Condition is the condition to apply (required).
-	Condition string `json:"condition"`
+	Condition string `json:"condition" yaml:"condition" hcl:"condition"`
 
 	// Type is the type of condition to be applied.
 	// Can be "simple", "regex", "jsonpath", or "xpath".
 	// For jsonpath and xpath with version, use ExpressionType instead.
-	Type CriterionType `json:"type,omitempty"`
+	Type CriterionType `json:"type,omitempty" yaml:"type,omitempty" hcl:"type,optional"`
 
 	// ExpressionType contains the type and version for expression-based criteria (jsonpath/xpath).
 	// When set, this takes precedence over Type.
-	ExpressionType *CriterionExpressionType `json:"-"`
+	ExpressionType *CriterionExpressionType `json:"-" yaml:"-" hcl:"expressionType,block"`
 
 	// Extensions contains specification extensions (x-*)
-	Extensions map[string]any `json:"-"`
+	Extensions map[string]any `json:"-" yaml:"-" hcl:"-"`
 }
 
 type criterionAlias struct {
@@ -122,15 +122,15 @@ func (c Criterion) MarshalJSON() ([]byte, error) {
 type CriterionExpressionType struct {
 	// Type is the type of condition to be applied (required).
 	// Must be "jsonpath" or "xpath".
-	Type CriterionType `json:"type"`
+	Type CriterionType `json:"type" yaml:"type" hcl:"type"`
 
 	// Version is a short hand string representing the version of the expression type (required).
 	// For jsonpath: "draft-goessner-dispatch-jsonpath-00"
 	// For xpath: "xpath-10", "xpath-20", "xpath-30"
-	Version string `json:"version"`
+	Version string `json:"version" yaml:"version" hcl:"version"`
 
 	// Extensions contains specification extensions (x-*)
-	Extensions map[string]any `json:"-"`
+	Extensions map[string]any `json:"-" yaml:"-" hcl:"-"`
 }
 
 type criterionExpressionTypeAlias CriterionExpressionType

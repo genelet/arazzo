@@ -20,17 +20,17 @@ const (
 type SourceDescription struct {
 	// Name is a unique name for the source description (required)
 	// Pattern: ^[A-Za-z0-9_\-]+$
-	Name string `json:"name"`
+	Name string `json:"name" yaml:"name" hcl:"name,label"`
 
 	// URL is a URL to a source description to be used by a workflow (required)
 	// Format: uri-reference
-	URL string `json:"url"`
+	URL string `json:"url" yaml:"url" hcl:"url"`
 
 	// Type is the type of source description (arazzo or openapi)
-	Type SourceDescriptionType `json:"type,omitempty"`
+	Type SourceDescriptionType `json:"type,omitempty" yaml:"type,omitempty" hcl:"type,optional"`
 
 	// Extensions contains specification extensions (x-*)
-	Extensions map[string]any `json:"-"`
+	Extensions map[string]any `json:"-" yaml:"-" hcl:"-"`
 }
 
 type sourceDescriptionAlias SourceDescription

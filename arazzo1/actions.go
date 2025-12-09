@@ -19,26 +19,26 @@ const (
 // to take upon success of a workflow step.
 type SuccessAction struct {
 	// Name is the name of the success action (required).
-	Name string `json:"name"`
+	Name string `json:"name" yaml:"name" hcl:"name,label"`
 
 	// Type is the type of action to take (required).
 	// Must be "end" or "goto".
-	Type SuccessActionType `json:"type"`
+	Type SuccessActionType `json:"type" yaml:"type" hcl:"type"`
 
 	// WorkflowId is the workflowId referencing an existing workflow within the Arazzo description
 	// to transfer to upon success of the step.
 	// Required when Type is "goto" (mutually exclusive with StepId).
-	WorkflowId string `json:"workflowId,omitempty"`
+	WorkflowId string `json:"workflowId,omitempty" yaml:"workflowId,omitempty" hcl:"workflowId,optional"`
 
 	// StepId is the stepId to transfer to upon success of the step.
 	// Required when Type is "goto" (mutually exclusive with WorkflowId).
-	StepId string `json:"stepId,omitempty"`
+	StepId string `json:"stepId,omitempty" yaml:"stepId,omitempty" hcl:"stepId,optional"`
 
 	// Criteria is a list of assertions to determine if this action SHALL be executed.
-	Criteria []*Criterion `json:"criteria,omitempty"`
+	Criteria []*Criterion `json:"criteria,omitempty" yaml:"criteria,omitempty" hcl:"criterion,block"`
 
 	// Extensions contains specification extensions (x-*)
-	Extensions map[string]any `json:"-"`
+	Extensions map[string]any `json:"-" yaml:"-" hcl:"-"`
 }
 
 type successActionAlias SuccessAction
@@ -92,34 +92,34 @@ const (
 // to take upon failure of a workflow step.
 type FailureAction struct {
 	// Name is the name of the failure action (required).
-	Name string `json:"name"`
+	Name string `json:"name" yaml:"name" hcl:"name,label"`
 
 	// Type is the type of action to take (required).
 	// Must be "end", "goto", or "retry".
-	Type FailureActionType `json:"type"`
+	Type FailureActionType `json:"type" yaml:"type" hcl:"type"`
 
 	// WorkflowId is the workflowId referencing an existing workflow within the Arazzo description
 	// to transfer to upon failure of the step.
 	// Required when Type is "goto" (mutually exclusive with StepId).
-	WorkflowId string `json:"workflowId,omitempty"`
+	WorkflowId string `json:"workflowId,omitempty" yaml:"workflowId,omitempty" hcl:"workflowId,optional"`
 
 	// StepId is the stepId to transfer to upon failure of the step.
 	// Required when Type is "goto" (mutually exclusive with WorkflowId).
-	StepId string `json:"stepId,omitempty"`
+	StepId string `json:"stepId,omitempty" yaml:"stepId,omitempty" hcl:"stepId,optional"`
 
 	// RetryAfter is a non-negative decimal indicating the seconds to delay after the step failure
 	// before another attempt SHALL be made.
-	RetryAfter *float64 `json:"retryAfter,omitempty"`
+	RetryAfter *float64 `json:"retryAfter,omitempty" yaml:"retryAfter,omitempty" hcl:"retryAfter,optional"`
 
 	// RetryLimit is a non-negative integer indicating how many attempts to retry the step
 	// MAY be attempted before failing the overall step.
-	RetryLimit *int `json:"retryLimit,omitempty"`
+	RetryLimit *int `json:"retryLimit,omitempty" yaml:"retryLimit,omitempty" hcl:"retryLimit,optional"`
 
 	// Criteria is a list of assertions to determine if this action SHALL be executed.
-	Criteria []*Criterion `json:"criteria,omitempty"`
+	Criteria []*Criterion `json:"criteria,omitempty" yaml:"criteria,omitempty" hcl:"criterion,block"`
 
 	// Extensions contains specification extensions (x-*)
-	Extensions map[string]any `json:"-"`
+	Extensions map[string]any `json:"-" yaml:"-" hcl:"-"`
 }
 
 type failureActionAlias FailureAction

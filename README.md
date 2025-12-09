@@ -14,9 +14,9 @@ go get github.com/genelet/arazzo
 
 - Full support for Arazzo 1.0.x specification
 - Marshal/Unmarshal JSON with proper round-trip preservation
+- **HCL format support** - Convert between JSON and HCL representations
 - Specification extensions (`x-*`) support on all objects
 - Comprehensive validation with detailed error paths
-- Zero external dependencies (only Go standard library)
 - Type-safe constants for enum values
 
 ## Quick Start
@@ -523,6 +523,186 @@ arazzo1.FailureActionTypeGoto  // "goto"
 arazzo1.FailureActionTypeRetry // "retry"
 ```
 
+## HCL Format Support
+
+The `convert` package provides functions to convert Arazzo documents between JSON and HCL formats using [genelet/horizon](https://github.com/genelet/horizon).
+
+### Converting JSON to HCL
+
+```go
+package main
+
+import (
+    "fmt"
+    "log"
+
+    "github.com/genelet/arazzo/convert"
+)
+
+func main() {
+    jsonData := []byte(`{
+        "arazzo": "1.0.0",
+        "info": {"title": "My Workflow", "version": "1.0.0"},
+        "sourceDescriptions": [
+            {"name": "petstore", "url": "./openapi.json", "type": "openapi"}
+        ],
+        "workflows": [
+            {
+                "workflowId": "get-pet",
+                "steps": [{"stepId": "fetch", "operationId": "getPetById"}]
+            }
+        ]
+    }`)
+
+    hclData, err := convert.JSONToHCL(jsonData)
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    fmt.Println(string(hclData))
+}
+```
+
+Output:
+```hcl
+arazzo = "1.0.0"
+
+info {
+  title   = "My Workflow"
+  version = "1.0.0"
+}
+
+sourceDescription "petstore" {
+  url  = "./openapi.json"
+  type = "openapi"
+}
+
+workflow "get-pet" {
+  step "fetch" {
+    operationId = "getPetById"
+  }
+}
+```
+
+### Converting HCL to JSON
+
+```go
+package main
+
+import (
+    "fmt"
+    "log"
+
+    "github.com/genelet/arazzo/convert"
+)
+
+func main() {
+    hclData := []byte(`
+arazzo = "1.0.0"
+
+info {
+  title   = "Pet Store Workflow"
+  version = "1.0.0"
+}
+
+sourceDescription "petstore" {
+  url  = "./openapi.json"
+  type = "openapi"
+}
+
+workflow "get-pet" {
+  step "fetch-pet" {
+    operationId = "getPetById"
+  }
+}
+`)
+
+    jsonData, err := convert.HCLToJSONIndent(hclData, "", "  ")
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    fmt.Println(string(jsonData))
+}
+```
+
+### Direct Marshal/Unmarshal with HCL
+
+```go
+package main
+
+import (
+    "fmt"
+    "log"
+
+    "github.com/genelet/arazzo/arazzo1"
+    "github.com/genelet/arazzo/convert"
+)
+
+func main() {
+    // Create a document
+    doc := &arazzo1.Arazzo{
+        Arazzo: "1.0.0",
+        Info: &arazzo1.Info{
+            Title:   "My API",
+            Version: "1.0.0",
+        },
+        SourceDescriptions: []*arazzo1.SourceDescription{
+            {Name: "api", URL: "./api.json"},
+        },
+        Workflows: []*arazzo1.Workflow{
+            {
+                WorkflowId: "test",
+                Steps: []*arazzo1.Step{
+                    {StepId: "s1", OperationId: "op1"},
+                },
+            },
+        },
+    }
+
+    // Marshal to HCL
+    hclData, err := convert.MarshalHCL(doc)
+    if err != nil {
+        log.Fatal(err)
+    }
+    fmt.Println(string(hclData))
+
+    // Unmarshal from HCL
+    var doc2 arazzo1.Arazzo
+    if err := convert.UnmarshalHCL(hclData, &doc2); err != nil {
+        log.Fatal(err)
+    }
+    fmt.Printf("Parsed: %s\n", doc2.Info.Title)
+}
+```
+
+### Convert Package Functions
+
+| Function | Description |
+|----------|-------------|
+| `JSONToHCL(jsonData []byte)` | Convert JSON to HCL |
+| `HCLToJSON(hclData []byte)` | Convert HCL to JSON |
+| `HCLToJSONIndent(hclData []byte, prefix, indent string)` | Convert HCL to indented JSON |
+| `MarshalHCL(doc *arazzo1.Arazzo)` | Marshal Arazzo document to HCL |
+| `UnmarshalHCL(hclData []byte, doc *arazzo1.Arazzo)` | Unmarshal HCL to Arazzo document |
+| `MarshalJSON(doc *arazzo1.Arazzo)` | Marshal Arazzo document to JSON |
+| `MarshalJSONIndent(doc *arazzo1.Arazzo, prefix, indent string)` | Marshal to indented JSON |
+| `UnmarshalJSON(jsonData []byte, doc *arazzo1.Arazzo)` | Unmarshal JSON to Arazzo document |
+
+### HCL Conversion Notes
+
+**JSON Schema `$ref` Handling**: JSON Schema keys starting with `$` (like `$ref`, `$id`, `$schema`) are automatically transformed to use `_` prefix (e.g., `_ref`) when converting to HCL, since `$` is not valid in HCL identifiers. The transformation is reversed when converting back to JSON.
+
+**Round-Trip Limitations**: The following scenarios may not round-trip perfectly through HCL:
+
+| Limitation | Description |
+|------------|-------------|
+| Multi-line strings | Long descriptions with embedded newlines in JSON Schema definitions may not parse correctly in HCL |
+| Numeric values in `any` fields | Integer/float values in dynamically-typed fields (like `Parameter.Value` in components) may be output without the `=` sign |
+| `Workflow.Inputs` with simple `$ref` | When `inputs` contains only a `$ref`, it's rendered as an HCL block but may not parse back into the `any` typed field |
+
+For full fidelity round-trips, use JSON format. HCL is best suited for human-authored configuration where these edge cases are avoided.
+
 ## Validation
 
 The `Validate()` method performs comprehensive validation:
@@ -551,4 +731,5 @@ MIT License - see [LICENSE](LICENSE) for details.
 ## Related Projects
 
 - [genelet/oas](https://github.com/genelet/oas) - Go parser for OpenAPI 3.0 and 3.1 specifications
+- [genelet/horizon](https://github.com/genelet/horizon) - HCL parsing library used for HCL format support
 - [Arazzo Specification](https://spec.openapis.org/arazzo/v1.0.0) - Official Arazzo specification

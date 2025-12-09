@@ -7,42 +7,42 @@ import (
 // Workflow describes the steps to be taken across one or more APIs to achieve an objective.
 type Workflow struct {
 	// WorkflowId is a unique string to represent the workflow (required)
-	WorkflowId string `json:"workflowId"`
+	WorkflowId string `json:"workflowId" yaml:"workflowId" hcl:"workflowId,label"`
 
 	// Summary is a summary of the purpose or objective of the workflow
-	Summary string `json:"summary,omitempty"`
+	Summary string `json:"summary,omitempty" yaml:"summary,omitempty" hcl:"summary,optional"`
 
 	// Description of the workflow. CommonMark syntax MAY be used for rich text representation.
-	Description string `json:"description,omitempty"`
+	Description string `json:"description,omitempty" yaml:"description,omitempty" hcl:"description,optional"`
 
 	// Inputs is a JSON Schema 2020-12 object representing the input parameters used by this workflow
-	Inputs any `json:"inputs,omitempty"`
+	Inputs any `json:"inputs,omitempty" yaml:"inputs,omitempty" hcl:"inputs,optional"`
 
 	// DependsOn is a list of workflows that MUST be completed before this workflow can be processed
-	DependsOn []string `json:"dependsOn,omitempty"`
+	DependsOn []string `json:"dependsOn,omitempty" yaml:"dependsOn,omitempty" hcl:"dependsOn,optional"`
 
 	// Steps is an ordered list of steps where each step represents a call to an API operation
 	// or to another workflow (required, minItems: 1)
-	Steps []*Step `json:"steps"`
+	Steps []*Step `json:"steps" yaml:"steps" hcl:"step,block"`
 
 	// SuccessActions is a list of success actions that are applicable for all steps
 	// described under this workflow
-	SuccessActions []*SuccessActionOrReusable `json:"successActions,omitempty"`
+	SuccessActions []*SuccessActionOrReusable `json:"successActions,omitempty" yaml:"successActions,omitempty" hcl:"successAction,block"`
 
 	// FailureActions is a list of failure actions that are applicable for all steps
 	// described under this workflow
-	FailureActions []*FailureActionOrReusable `json:"failureActions,omitempty"`
+	FailureActions []*FailureActionOrReusable `json:"failureActions,omitempty" yaml:"failureActions,omitempty" hcl:"failureAction,block"`
 
 	// Outputs is a map between a friendly name and a dynamic output value
 	// Pattern for keys: ^[a-zA-Z0-9\.\-_]+$
-	Outputs map[string]string `json:"outputs,omitempty"`
+	Outputs map[string]string `json:"outputs,omitempty" yaml:"outputs,omitempty" hcl:"outputs,optional"`
 
 	// Parameters is a list of parameters that are applicable for all steps
 	// described under this workflow
-	Parameters []*ParameterOrReusable `json:"parameters,omitempty"`
+	Parameters []*ParameterOrReusable `json:"parameters,omitempty" yaml:"parameters,omitempty" hcl:"parameter,block"`
 
 	// Extensions contains specification extensions (x-*)
-	Extensions map[string]any `json:"-"`
+	Extensions map[string]any `json:"-" yaml:"-" hcl:"-"`
 }
 
 type workflowAlias Workflow
@@ -85,8 +85,8 @@ func (w Workflow) MarshalJSON() ([]byte, error) {
 
 // SuccessActionOrReusable represents either a SuccessAction or a ReusableObject.
 type SuccessActionOrReusable struct {
-	SuccessAction *SuccessAction
-	Reusable      *ReusableObject
+	SuccessAction *SuccessAction  `hcl:"successAction,block"`
+	Reusable      *ReusableObject `hcl:"reusable,block"`
 }
 
 // UnmarshalJSON implements the json.Unmarshaler interface.
@@ -116,8 +116,8 @@ func (s SuccessActionOrReusable) MarshalJSON() ([]byte, error) {
 
 // FailureActionOrReusable represents either a FailureAction or a ReusableObject.
 type FailureActionOrReusable struct {
-	FailureAction *FailureAction
-	Reusable      *ReusableObject
+	FailureAction *FailureAction  `hcl:"failureAction,block"`
+	Reusable      *ReusableObject `hcl:"reusable,block"`
 }
 
 // UnmarshalJSON implements the json.Unmarshaler interface.
@@ -147,8 +147,8 @@ func (f FailureActionOrReusable) MarshalJSON() ([]byte, error) {
 
 // ParameterOrReusable represents either a Parameter or a ReusableObject.
 type ParameterOrReusable struct {
-	Parameter *Parameter
-	Reusable  *ReusableObject
+	Parameter *Parameter      `hcl:"parameter,block"`
+	Reusable  *ReusableObject `hcl:"reusable,block"`
 }
 
 // UnmarshalJSON implements the json.Unmarshaler interface.
