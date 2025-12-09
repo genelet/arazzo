@@ -9,11 +9,23 @@ import (
 	"github.com/genelet/horizon/dethcl"
 )
 
-// transformKeys recursively transforms map keys in a value.
-// When toHCL is true, it converts $ref to _ref (for HCL compatibility).
-// When toHCL is false, it converts _ref back to $ref (for JSON compatibility).
-func transformKeys(v any, toHCL bool) any {
+// transformValue recursively transforms values for HCL compatibility.
+// When toHCL is true:
+//   - Converts $ref to _ref ($ not valid in HCL identifiers)
+//   - Escapes newlines in strings (HCL quoted strings cannot span multiple lines)
+//
+// When toHCL is false:
+//   - Converts _ref back to $ref
+//   - Unescapes newlines in strings
+func transformValue(v any, toHCL bool) any {
 	switch val := v.(type) {
+	case string:
+		if toHCL {
+			// Escape newlines and quotes for HCL compatibility
+			return escapeForHCL(val)
+		}
+		// Unescape newlines and quotes when converting back from HCL
+		return unescapeFromHCL(val)
 	case map[string]any:
 		result := make(map[string]any)
 		for k, v := range val {
@@ -28,13 +40,13 @@ func transformKeys(v any, toHCL bool) any {
 					newKey = "$" + k[1:]
 				}
 			}
-			result[newKey] = transformKeys(v, toHCL)
+			result[newKey] = transformValue(v, toHCL)
 		}
 		return result
 	case []any:
 		result := make([]any, len(val))
 		for i, item := range val {
-			result[i] = transformKeys(item, toHCL)
+			result[i] = transformValue(item, toHCL)
 		}
 		return result
 	default:
@@ -42,34 +54,125 @@ func transformKeys(v any, toHCL bool) any {
 	}
 }
 
+// escapeForHCL escapes special characters in strings for HCL compatibility.
+// HCL quoted strings cannot span multiple lines, so newlines are escaped as \n.
+// Internal double quotes are escaped as \".
+func escapeForHCL(s string) string {
+	// First protect already-escaped sequences
+	s = strings.ReplaceAll(s, "\\n", "\x00ESCAPED_N\x00")
+	s = strings.ReplaceAll(s, "\\\"", "\x00ESCAPED_Q\x00")
+
+	// Escape newlines and quotes
+	s = strings.ReplaceAll(s, "\n", "\\n")
+	s = strings.ReplaceAll(s, "\"", "\\\"")
+
+	// Restore double-escaped sequences
+	s = strings.ReplaceAll(s, "\x00ESCAPED_N\x00", "\\\\n")
+	s = strings.ReplaceAll(s, "\x00ESCAPED_Q\x00", "\\\\\"")
+	return s
+}
+
+// escapeNewlines replaces actual newlines with escaped \n sequences
+// so that HCL quoted strings remain on a single line.
+// This is used for string fields that go through standard JSON marshaling.
+func escapeNewlines(s string) string {
+	// Replace actual newlines with escaped sequence
+	// We use a placeholder first to avoid double-escaping existing \n
+	s = strings.ReplaceAll(s, "\\n", "\x00ESCAPED_N\x00")
+	s = strings.ReplaceAll(s, "\n", "\\n")
+	s = strings.ReplaceAll(s, "\x00ESCAPED_N\x00", "\\\\n")
+	return s
+}
+
+// unescapeNewlines converts escaped \n sequences back to actual newlines.
+func unescapeNewlines(s string) string {
+	// First protect already escaped backslashes followed by n
+	s = strings.ReplaceAll(s, "\\\\n", "\x00ESCAPED_N\x00")
+	// Then convert \n to actual newline
+	s = strings.ReplaceAll(s, "\\n", "\n")
+	// Restore escaped sequences
+	s = strings.ReplaceAll(s, "\x00ESCAPED_N\x00", "\\n")
+	return s
+}
+
+// unescapeFromHCL unescapes special characters from HCL strings.
+func unescapeFromHCL(s string) string {
+	// First protect double-escaped sequences
+	s = strings.ReplaceAll(s, "\\\\n", "\x00ESCAPED_N\x00")
+	s = strings.ReplaceAll(s, "\\\\\"", "\x00ESCAPED_Q\x00")
+
+	// Unescape newlines and quotes
+	s = strings.ReplaceAll(s, "\\n", "\n")
+	s = strings.ReplaceAll(s, "\\\"", "\"")
+
+	// Restore double-escaped as single-escaped
+	s = strings.ReplaceAll(s, "\x00ESCAPED_N\x00", "\\n")
+	s = strings.ReplaceAll(s, "\x00ESCAPED_Q\x00", "\\\"")
+	return s
+}
+
 // transformArazzoForHCL transforms an Arazzo document's dynamic fields ($ref -> _ref) for HCL compatibility.
+// It also escapes newlines in string fields since HCL quoted strings cannot span multiple lines.
 func transformArazzoForHCL(doc *arazzo1.Arazzo) {
-	// Transform workflow inputs
+	// Transform string fields with potential newlines
+	if doc.Info != nil {
+		doc.Info.Description = escapeNewlines(doc.Info.Description)
+		doc.Info.Summary = escapeNewlines(doc.Info.Summary)
+	}
 	for _, wf := range doc.Workflows {
+		wf.Description = escapeNewlines(wf.Description)
+		wf.Summary = escapeNewlines(wf.Summary)
+		// Transform workflow inputs
 		if wf.Inputs != nil {
-			wf.Inputs = transformKeys(wf.Inputs, true)
+			wf.Inputs = transformValue(wf.Inputs, true)
+		}
+		for _, step := range wf.Steps {
+			step.Description = escapeNewlines(step.Description)
+			if step.RequestBody != nil {
+				// Transform any-typed Payload and Replacements
+				if step.RequestBody.Payload != nil {
+					step.RequestBody.Payload = transformValue(step.RequestBody.Payload, true)
+				}
+			}
 		}
 	}
 	// Transform component inputs
 	if doc.Components != nil && doc.Components.Inputs != nil {
 		for k, v := range doc.Components.Inputs {
-			doc.Components.Inputs[k] = transformKeys(v, true)
+			doc.Components.Inputs[k] = transformValue(v, true)
 		}
 	}
 }
 
 // transformArazzoFromHCL transforms an Arazzo document's dynamic fields (_ref -> $ref) back from HCL.
+// It also unescapes newlines in string fields.
 func transformArazzoFromHCL(doc *arazzo1.Arazzo) {
-	// Transform workflow inputs
+	// Transform string fields with escaped newlines
+	if doc.Info != nil {
+		doc.Info.Description = unescapeNewlines(doc.Info.Description)
+		doc.Info.Summary = unescapeNewlines(doc.Info.Summary)
+	}
 	for _, wf := range doc.Workflows {
+		wf.Description = unescapeNewlines(wf.Description)
+		wf.Summary = unescapeNewlines(wf.Summary)
+		// Transform workflow inputs
 		if wf.Inputs != nil {
-			wf.Inputs = transformKeys(wf.Inputs, false)
+			wf.Inputs = transformValue(wf.Inputs, false)
+		}
+		for _, step := range wf.Steps {
+			step.Description = unescapeNewlines(step.Description)
+			if step.RequestBody != nil {
+				// Transform any-typed Payload and Replacements
+				if step.RequestBody.Payload != nil {
+					step.RequestBody.Payload = transformValue(step.RequestBody.Payload, false)
+				}
+			}
 		}
 	}
 	// Transform component inputs
 	if doc.Components != nil && doc.Components.Inputs != nil {
 		for k, v := range doc.Components.Inputs {
-			doc.Components.Inputs[k] = transformKeys(v, false)
+			doc.Components.Inputs[k] = transformValue(v, false)
 		}
 	}
 }

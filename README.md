@@ -693,15 +693,13 @@ func main() {
 
 **JSON Schema `$ref` Handling**: JSON Schema keys starting with `$` (like `$ref`, `$id`, `$schema`) are automatically transformed to use `_` prefix (e.g., `_ref`) when converting to HCL, since `$` is not valid in HCL identifiers. The transformation is reversed when converting back to JSON.
 
-**Round-Trip Limitations**: The following scenarios may not round-trip perfectly through HCL:
+**String Escaping**: Multi-line strings and strings containing embedded quotes are automatically escaped when converting to HCL and unescaped when converting back. Newlines become `\n` sequences in HCL output.
 
-| Limitation | Description |
-|------------|-------------|
-| Multi-line strings | Long descriptions with embedded newlines in JSON Schema definitions may not parse correctly in HCL |
-| Numeric values in `any` fields | Integer/float values in dynamically-typed fields (like `Parameter.Value` in components) may be output without the `=` sign |
-| `Workflow.Inputs` with simple `$ref` | When `inputs` contains only a `$ref`, it's rendered as an HCL block but may not parse back into the `any` typed field |
+**Primitive Values in `any` Fields**: Primitive values (strings, numbers, booleans) in dynamically-typed fields (like `RequestBody.Payload`) are correctly rendered as HCL attributes (e.g., `payload = "value"`) rather than block labels.
 
-For full fidelity round-trips, use JSON format. HCL is best suited for human-authored configuration where these edge cases are avoided.
+**Round-Trip Limitations**: Most Arazzo documents round-trip correctly through HCL. Edge cases involving numeric values within arrays of `any` typed elements may require special handling.
+
+For full fidelity round-trips, use JSON format. HCL is best suited for human-authored configuration.
 
 ## Validation
 

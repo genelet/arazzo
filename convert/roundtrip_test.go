@@ -16,12 +16,11 @@ func TestRoundTripExamples(t *testing.T) {
 	examplesDir := "./examples/1.0.0"
 
 	// Files with known HCL serialization limitations:
-	// - FAPI-PAR: contains multi-line strings that HCL doesn't handle properly
-	// - pet-coupons: contains numeric values in `any` typed fields (Parameter.Value)
-	//   which the HCL library outputs without the = sign
+	// - pet-coupons: numeric values in Parameter.Value within arrays still cause issues
+	//   because Parameter is stored as []any and the numeric values within require
+	//   special handling in array contexts
 	knownLimitations := map[string]string{
-		"FAPI-PAR.arazzo.yaml":    "multi-line strings in JSON schema descriptions",
-		"pet-coupons.arazzo.yaml": "numeric values in any-typed fields (Parameter.Value) cause malformed HCL output",
+		"pet-coupons.arazzo.yaml": "numeric values in Parameter.Value within arrays require special handling",
 	}
 
 	// Find all arazzo YAML files
@@ -301,10 +300,7 @@ workflows:
 // TestRefTransformation tests that $ref is correctly transformed to _ref for HCL
 // and back to $ref when converting back to JSON.
 func TestRefTransformation(t *testing.T) {
-	// Create a document with $ref in component inputs
-	// Note: Workflow.Inputs (any type) rendered as HCL blocks are not preserved
-	// during round-trip due to HCL library limitations, so we test Components.Inputs
-	// which is map[string]any and works correctly.
+	// Create a document with $ref in component inputs and workflow inputs
 	doc := &arazzo1.Arazzo{
 		Arazzo: "1.0.0",
 		Info: &arazzo1.Info{
@@ -320,6 +316,9 @@ func TestRefTransformation(t *testing.T) {
 		Workflows: []*arazzo1.Workflow{
 			{
 				WorkflowId: "test-workflow",
+				Inputs: map[string]any{
+					"$ref": "#/components/inputs/workflow_input",
+				},
 				Steps: []*arazzo1.Step{
 					{
 						StepId:      "step1",
@@ -409,5 +408,15 @@ func TestRefTransformation(t *testing.T) {
 	simpleRef := doc2.Components.Inputs["simple_ref"].(map[string]any)
 	if _, ok := simpleRef["$ref"]; !ok {
 		t.Error("simple_ref should contain $ref key")
+	}
+
+	// Check workflow inputs $ref was restored
+	if doc2.Workflows[0].Inputs == nil {
+		t.Error("Workflow inputs should not be nil")
+	} else {
+		workflowInputs := doc2.Workflows[0].Inputs.(map[string]any)
+		if _, ok := workflowInputs["$ref"]; !ok {
+			t.Error("Workflow inputs should contain $ref key")
+		}
 	}
 }

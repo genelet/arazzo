@@ -3,7 +3,9 @@ module github.com/genelet/arazzo
 go 1.25.4
 
 require (
-	github.com/genelet/horizon v1.13.4
+	github.com/genelet/horizon v1.13.5-0.20251209130657-d15ae2cd06ae
+	github.com/hashicorp/hcl/v2 v2.24.0
+	github.com/zclconf/go-cty v1.17.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -16,10 +18,8 @@ require (
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/hashicorp/go-uuid v1.0.3 // indirect
-	github.com/hashicorp/hcl/v2 v2.24.0 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/mitchellh/go-wordwrap v1.0.1 // indirect
-	github.com/zclconf/go-cty v1.17.0 // indirect
 	github.com/zclconf/go-cty-yaml v1.1.0 // indirect
 	golang.org/x/crypto v0.45.0 // indirect
 	golang.org/x/mod v0.29.0 // indirect

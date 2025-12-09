@@ -2,7 +2,7 @@
   info {
     title       = "A pet purchasing workflow"
     summary     = "This workflow showcases how to purchase a pet through a sequence of API calls"
-    description = "This workflow walks you through the steps of `searching` for, `selecting`, and `purchasing` an available pet.\n"
+    description = "This workflow walks you through the steps of `searching` for, `selecting`, and `purchasing` an available pet.\\n"
     version     = "1.0.1"
   }
   sourceDescription "petStoreDescription" {
@@ -16,13 +16,13 @@
       available = "$steps.getPetStep.outputs.availablePets"
     }
     inputs {
-      type = "object"
       properties "password" {
         type = "string"
       }
       properties "username" {
         type = "string"
       }
+      type = "object"
     }
     step "loginStep" {
       description = "This step demonstrates the user login step"
@@ -39,9 +39,9 @@
           value = "$inputs.username"
         },
         {
-          value = "$inputs.password"
           in = "query"
           name = "password"
+          value = "$inputs.password"
         }
       ]
       successCriterion {
@@ -56,9 +56,9 @@
       }
       parameters = [
         {
+          in = "query"
           name = "status"
           value = "available"
-          in = "query"
         },
         {
           in = "header"

@@ -89,13 +89,13 @@
       }
       parameters = [
         {
+          value = "available"
           in = "query"
           name = "status"
-          value = "available"
         },
         {
-          value = 1
           reference = "$components.parameters.page"
+          value = 1
         },
         {
           reference = "$components.parameters.pageSize"
@@ -114,8 +114,8 @@
       }
       parameters = [
         {
-          name = "pet_id"
           value = "$steps.find-pet.outputs.my_pet_id"
+          name = "pet_id"
         }
       ]
       successCriterion {
@@ -135,9 +135,9 @@
         type = "string"
       }
       properties "pet_id" {
-        format = "int64"
         type = "integer"
         description = "The ID of the pet to place in the order."
+        format = "int64"
       }
       properties "quantity" {
         description = "The number of pets to place in the order."
@@ -155,11 +155,11 @@
       requestBody {
         contentType = "application/json"
         payload {
+          status = "placed"
           complete = false
           couponCode = "$inputs.coupon_code"
           petId = "$inputs.pet_id"
           quantity = "$inputs.quantity"
-          status = "placed"
         }
       }
       successCriterion {
@@ -170,17 +170,17 @@
   components {
     inputs {
       apply_coupon_input {
-        type = "object"
         properties "my_pet_tags" {
-          type = "array"
-          description = "Desired tags to use when searching for a pet, in CSV format (e.g. "puppy, dalmatian")"
+          description = "Desired tags to use when searching for a pet, in CSV format (e.g. \"puppy, dalmatian\")"
           items {
             type = "string"
           }
+          type = "array"
         }
         properties "store_id" {
           _ref = "#/components/inputs/store_id"
         }
+        type = "object"
       }
       buy_available_pet_input {
         properties "store_id" {
@@ -189,16 +189,16 @@
         type = "object"
       }
       store_id {
-        description = "Indicates the domain name of the store where the customer is browsing or buying pets, e.g. "pets.example.com" or "pets.example.co.uk"."
+        description = "Indicates the domain name of the store where the customer is browsing or buying pets, e.g. \"pets.example.com\" or \"pets.example.co.uk\"."
         type = "string"
       }
     }
     parameter "page" {
       in = "query"
-      value 1
+      value = 1
     }
     parameter "pageSize" {
       in = "query"
-      value 100
+      value = 100
     }
   }

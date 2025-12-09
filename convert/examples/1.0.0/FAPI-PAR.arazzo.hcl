@@ -21,10 +21,6 @@
       ]
       type = "object"
       properties "PARrequestBody" {
-        description = "Parameters that comprise an authorization request are sent directly to the 
-pushed authorization request endpoint in the request body
-[PAR Request](https://tools.ietf.org/html/draft-ietf-oauth-par-07#section-2.1)            
-"
         properties "client_id" {
           type = "string"
         }
@@ -59,6 +55,7 @@ pushed authorization request endpoint in the request body
           type = "string"
         }
         type = "object"
+        description = "Parameters that comprise an authorization request are sent directly to the \npushed authorization request endpoint in the request body\n[PAR Request](https://tools.ietf.org/html/draft-ietf-oauth-par-07#section-2.1)            \n"
       }
       properties "TokenRequestBody" {
         properties "code" {
@@ -83,6 +80,8 @@ pushed authorization request endpoint in the request body
         description = "Request Schema for the token endpoint in the context of an OAuth2 Authorization code flow (**Note** this is place holder object that will have values replaced dynamically)"
       }
       properties "client_assertion" {
+        type = "object"
+        description = "Used for PAR client authentication. The assertion contains a JWS, in this an object `base64(JWS)` \nsigned with JWT signing private key related to the TPP OAuth client. See the Model and the Assertion \nobject for a detailed description of the content.           \n"
         properties "aud" {
           type = "string"
         }
@@ -101,11 +100,6 @@ pushed authorization request endpoint in the request body
         properties "sub" {
           type = "string"
         }
-        type = "object"
-        description = "Used for PAR client authentication. The assertion contains a JWS, in this an object `base64(JWS)` 
-signed with JWT signing private key related to the TPP OAuth client. See the Model and the Assertion 
-object for a detailed description of the content.           
-"
       }
       properties "client_id" {
         description = "The identifier of the third party provider OAuth client. ClientId is returned during the TPP registration."
@@ -138,13 +132,13 @@ object for a detailed description of the content.
           value = "urn:ietf:params:oauth:grant-type:jwt-bearer"
         },
         {
+          value = "$inputs.client_assertion"
           in = "query"
           name = "client_assertion"
-          value = "$inputs.client_assertion"
         }
       ]
       requestBody {
-        payload "$inputs.PARrequestBody"
+        payload = "$inputs.PARrequestBody"
       }
       successCriterion {
         condition = "$statusCode == 200"
@@ -196,13 +190,7 @@ object for a detailed description of the content.
         }
       ]
       requestBody {
-        payload "{
-  "grant_type": "authorization_code",
-  "code": "{$steps.AuthzCodeStep.outputs.code}",
-  "redirect_uri": "{$inputs.redirect_uri}",
-  "code_verifier": "{$inputs.code_verifier}"
-}                      
-"
+        payload = "{\n  \"grant_type\": \"authorization_code\",\n  \"code\": \"{$steps.AuthzCodeStep.outputs.code}\",\n  \"redirect_uri\": \"{$inputs.redirect_uri}\",\n  \"code_verifier\": \"{$inputs.code_verifier}\"\n}                      \n"
       }
       successCriterion {
         condition = "$statusCode == 200"

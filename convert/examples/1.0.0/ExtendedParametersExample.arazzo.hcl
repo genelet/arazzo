@@ -12,9 +12,9 @@
       operationId = "$sourceDescriptions.animals.postAnimal"
       parameters = [
         {
+          in = "cookie"
           name = "authentication"
           value = "SUPER_SECRET"
-          in = "cookie"
         }
       ]
     }

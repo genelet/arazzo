@@ -22,8 +22,8 @@
         type = "string"
       }
       properties "my_client_secret" {
-        description = "The client secret"
         type = "string"
+        description = "The client secret"
       }
       properties "my_redirect_uri" {
         description = "The redirect uri"
@@ -39,8 +39,8 @@
       }
       parameters = [
         {
-          value = "$inputs.my_client_id"
           name = "client_id"
+          value = "$inputs.my_client_id"
         },
         {
           name = "redirect_uri"
@@ -84,15 +84,15 @@
       access_token = "$steps.get-client-creds-token.outputs.access_token"
     }
     inputs {
+      type = "object"
       properties "client_id" {
         description = "The client id"
         type = "string"
       }
       properties "client_secret" {
-        description = "The client secret"
         type = "string"
+        description = "The client secret"
       }
-      type = "object"
     }
     step "get-client-creds-token" {
       description = "This is where you get the token"
@@ -149,19 +149,19 @@
       }
       parameters = [
         {
+          value = "$inputs.client_id"
           in = "query"
           name = "client_id"
-          value = "$inputs.client_id"
         },
         {
-          value = "$inputs.redirect_uri"
           in = "query"
           name = "redirect_uri"
+          value = "$inputs.redirect_uri"
         },
         {
-          in = "query"
           name = "response_type"
           value = "code"
+          in = "query"
         },
         {
           in = "query"
@@ -194,11 +194,11 @@
       requestBody {
         contentType = "application/x-www-form-urlencoded"
         payload {
+          code = "$steps.browser-authorize.outputs.code"
+          grant_type = "authorization_code"
           redirect_uri = "$inputs.redirect_uri"
           client_id = "$inputs.client_id"
           client_secret = "$inputs.client_secret"
-          code = "$steps.browser-authorize.outputs.code"
-          grant_type = "authorization_code"
         }
       }
       successCriterion {
