@@ -13,7 +13,7 @@ import (
 
 // TestRoundTripExamples tests JSON-HCL-JSON round-trip conversion for all example files.
 func TestRoundTripExamples(t *testing.T) {
-	examplesDir := "../arazzo1/examples/1.0.0"
+	examplesDir := "./examples/1.0.0"
 
 	// Files with known HCL serialization limitations:
 	// - FAPI-PAR: contains multi-line strings that HCL doesn't handle properly
@@ -154,7 +154,7 @@ func compareArazzoDocs(t *testing.T, doc1, doc2 *arazzo1.Arazzo) {
 
 // TestRoundTripSpecificExample tests a specific example file with detailed output.
 func TestRoundTripLoginAndRetrievePets(t *testing.T) {
-	filePath := "../arazzo1/examples/1.0.0/LoginAndRetrievePets.arazzo.yaml"
+	filePath := "./examples/1.0.0/LoginAndRetrievePets.arazzo.yaml"
 
 	yamlData, err := os.ReadFile(filePath)
 	if err != nil {
