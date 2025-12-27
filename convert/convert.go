@@ -128,6 +128,12 @@ func transformArazzoForHCL(doc *arazzo1.Arazzo) {
 		}
 		for _, step := range wf.Steps {
 			step.Description = escapeNewlines(step.Description)
+			// Transform step parameters ([]any may contain maps with $ref keys and numeric values)
+			if step.Parameters != nil {
+				for i, param := range step.Parameters {
+					step.Parameters[i] = transformValue(param, true)
+				}
+			}
 			if step.RequestBody != nil {
 				// Transform any-typed Payload and Replacements
 				if step.RequestBody.Payload != nil {
@@ -161,6 +167,12 @@ func transformArazzoFromHCL(doc *arazzo1.Arazzo) {
 		}
 		for _, step := range wf.Steps {
 			step.Description = unescapeNewlines(step.Description)
+			// Transform step parameters ([]any may contain maps with _ref keys)
+			if step.Parameters != nil {
+				for i, param := range step.Parameters {
+					step.Parameters[i] = transformValue(param, false)
+				}
+			}
 			if step.RequestBody != nil {
 				// Transform any-typed Payload and Replacements
 				if step.RequestBody.Payload != nil {

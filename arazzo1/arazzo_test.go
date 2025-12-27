@@ -2,6 +2,7 @@ package arazzo1
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -797,25 +798,12 @@ func TestValidation(t *testing.T) {
 			}
 			if !tc.expectValid && tc.expectError != "" {
 				errorStr := result.Error()
-				if errorStr == "" || !containsSubstring(errorStr, tc.expectError) {
+				if errorStr == "" || !strings.Contains(errorStr, tc.expectError) {
 					t.Errorf("Expected error containing '%s', got: %s", tc.expectError, errorStr)
 				}
 			}
 		})
 	}
-}
-
-func containsSubstring(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsSubstringHelper(s, substr))
-}
-
-func containsSubstringHelper(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }
 
 func TestStepHelperMethods(t *testing.T) {

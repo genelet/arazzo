@@ -16,11 +16,8 @@ func TestRoundTripExamples(t *testing.T) {
 	examplesDir := "./examples/1.0.0"
 
 	// Files with known HCL serialization limitations:
-	// - pet-coupons: numeric values in Parameter.Value within arrays still cause issues
-	//   because Parameter is stored as []any and the numeric values within require
-	//   special handling in array contexts
 	knownLimitations := map[string]string{
-		"pet-coupons.arazzo.yaml": "numeric values in Parameter.Value within arrays require special handling",
+		// Empty - all previously known issues have been fixed
 	}
 
 	// Find all arazzo YAML files

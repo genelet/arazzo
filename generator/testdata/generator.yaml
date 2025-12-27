@@ -1,0 +1,8 @@
+provider:
+  name: test-service
+  server_url: http://api.example.com
+http:
+  - name: my-op
+    service_type: http
+    path: /test
+    method: GET

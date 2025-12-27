@@ -1,0 +1,90 @@
+{
+  "arazzo": "1.0.0",
+  "info": {
+    "title": "Generated Arazzo from Swagger Petstore - OpenAPI 3.0",
+    "summary": "Generated from testdata/petstore.openapi.yaml",
+    "version": "1.0.0"
+  },
+  "sourceDescriptions": [
+    {
+      "name": "petStoreDescription",
+      "url": "testdata/petstore.openapi.yaml",
+      "type": "openapi"
+    }
+  ],
+  "workflows": [
+    {
+      "workflowId": "loginUserRetrievePet",
+      "summary": "Login User and then retrieve pets",
+      "description": "This procedure lays out the steps to login a user and then retrieve pets",
+      "inputs": {
+        "properties": {
+          "password": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "steps": [
+        {
+          "stepId": "loginStep",
+          "description": "This step demonstrates the user login step",
+          "operationId": "$sourceDescriptions.petStoreDescription.loginUser",
+          "parameters": [
+            {
+              "name": "username",
+              "in": "query",
+              "value": "$inputs.username"
+            },
+            {
+              "name": "password",
+              "in": "query",
+              "value": "$inputs.password"
+            }
+          ],
+          "successCriteria": [
+            {
+              "condition": "$statusCode == 200"
+            }
+          ],
+          "outputs": {
+            "rateLimit": "$response.header.X-Rate-Limit",
+            "sessionToken": "$response.body",
+            "tokenExpires": "$response.header.X-Expires-After"
+          }
+        },
+        {
+          "stepId": "getPetStep",
+          "description": "retrieve a pet by status from the GET pets endpoint",
+          "operationPath": "{$sourceDescriptions.petStoreDescription.url}#/paths/~1pet~1findByStatus",
+          "parameters": [
+            {
+              "name": "status",
+              "in": "query",
+              "value": "available"
+            },
+            {
+              "name": "Authorization",
+              "in": "header",
+              "value": "$steps.loginStep.outputs.sessionToken"
+            }
+          ],
+          "successCriteria": [
+            {
+              "condition": "$statusCode == 200"
+            }
+          ],
+          "outputs": {
+            "availablePets": "$response.body"
+          }
+        }
+      ],
+      "outputs": {
+        "available": "$steps.getPetStep.outputs.availablePets"
+      }
+    }
+  ]
+}

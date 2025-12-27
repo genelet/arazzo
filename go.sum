@@ -10,6 +10,8 @@ github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/genelet/horizon v1.13.5-0.20251209130657-d15ae2cd06ae h1:1O0oxc2OKb/h4q4COOzTIEZdAaLx4ViDSD7lGglvZl8=
 github.com/genelet/horizon v1.13.5-0.20251209130657-d15ae2cd06ae/go.mod h1:mJPVzZ5+fogvaIi61QS1nUZBMai0xaA22R/qlbZdu/w=
+github.com/genelet/oas v0.0.0-20251209172154-2e3e4a13646b h1:64fvOUfBZQUsGdINiA8MQa1y6Ybst4tW9gtKuwvHFko=
+github.com/genelet/oas v0.0.0-20251209172154-2e3e4a13646b/go.mod h1:DnQIWAYjrckHkuYCdYa6nZ3HlQ9aUaK++CKZ0KbT6DM=
 github.com/genelet/schema v0.0.0-20251203212046-4a325f33cf8e h1:oBz67i9esRNHLd1vAwS0m7fPcXccKc0+djpQuhju2rU=
 github.com/genelet/schema v0.0.0-20251203212046-4a325f33cf8e/go.mod h1:OYTK4cOVgg2kavgv+yAgVqR9kuKUWE3Zdo6z6XlDZHo=
 github.com/go-test/deep v1.0.3 h1:ZrJSEWsXzPOxaZnFteGEfooLba+ju3FYIbOrS+rQd68=

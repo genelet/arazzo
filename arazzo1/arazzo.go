@@ -2,6 +2,7 @@ package arazzo1
 
 import (
 	"encoding/json"
+	"fmt"
 )
 
 // Arazzo represents the root object of an Arazzo 1.0.x document.
@@ -40,13 +41,13 @@ var arazzoKnownFields = []string{
 func (a *Arazzo) UnmarshalJSON(data []byte) error {
 	var alias arazzoAlias
 	if err := json.Unmarshal(data, &alias); err != nil {
-		return err
+		return fmt.Errorf("unmarshaling arazzo: %w", err)
 	}
 	*a = Arazzo(alias)
 
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
-		return err
+		return fmt.Errorf("unmarshaling arazzo extensions: %w", err)
 	}
 	a.Extensions = extractExtensions(raw, arazzoKnownFields)
 

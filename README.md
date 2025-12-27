@@ -695,11 +695,9 @@ func main() {
 
 **String Escaping**: Multi-line strings and strings containing embedded quotes are automatically escaped when converting to HCL and unescaped when converting back. Newlines become `\n` sequences in HCL output.
 
-**Primitive Values in `any` Fields**: Primitive values (strings, numbers, booleans) in dynamically-typed fields (like `RequestBody.Payload`) are correctly rendered as HCL attributes (e.g., `payload = "value"`) rather than block labels.
+**Primitive Values in `any` Fields**: Primitive values (strings, numbers, booleans) in dynamically-typed fields (like `RequestBody.Payload` and `Parameter.Value`) are correctly rendered as HCL attributes and properly round-trip through conversions. This includes numeric values in component parameters and step parameter arrays.
 
-**Round-Trip Limitations**: Most Arazzo documents round-trip correctly through HCL. Edge cases involving numeric values within arrays of `any` typed elements may require special handling.
-
-For full fidelity round-trips, use JSON format. HCL is best suited for human-authored configuration.
+**Full Round-Trip Support**: All Arazzo documents round-trip correctly through HCL, including complex cases with numeric parameter values and nested structures. Both JSON and HCL formats maintain full fidelity.
 
 ## Validation
 

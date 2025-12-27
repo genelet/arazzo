@@ -2,6 +2,10 @@ package arazzo1
 
 import (
 	"encoding/json"
+	"fmt"
+
+	"github.com/hashicorp/hcl/v2"
+	"github.com/hashicorp/hcl/v2/hclsyntax"
 )
 
 // ParameterIn represents the location of a parameter.
@@ -67,4 +71,44 @@ func (p *Parameter) UnmarshalJSON(data []byte) error {
 func (p Parameter) MarshalJSON() ([]byte, error) {
 	alias := parameterAlias(p)
 	return marshalWithExtensions(&alias, p.Extensions)
+}
+
+// UnmarshalHCL implements the dethcl.Unmarshaler interface.
+// This custom unmarshaler handles the Value field which is typed as `any`
+// and needs special handling to parse HCL values (especially numbers) into Go values.
+func (p *Parameter) UnmarshalHCL(data []byte, labels ...string) error {
+	// Parse HCL
+	file, diags := hclsyntax.ParseConfig(data, "", hcl.Pos{Line: 1, Column: 1})
+	if diags.HasErrors() {
+		return fmt.Errorf("parsing HCL: %w", diags)
+	}
+
+	body, ok := file.Body.(*hclsyntax.Body)
+	if !ok {
+		return fmt.Errorf("unexpected HCL body type: %T", file.Body)
+	}
+
+	// Set label (name) if provided
+	if len(labels) > 0 {
+		p.Name = labels[0]
+	}
+
+	// Process attributes
+	for name, attr := range body.Attributes {
+		val, diags := attr.Expr.Value(nil)
+		if diags.HasErrors() {
+			return fmt.Errorf("attribute %q: %w", name, diags)
+		}
+
+		switch name {
+		case "name":
+			p.Name = val.AsString()
+		case "in":
+			p.In = ParameterIn(val.AsString())
+		case "value":
+			p.Value = ctyToGo(val)
+		}
+	}
+
+	return nil
 }

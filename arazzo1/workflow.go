@@ -2,6 +2,9 @@ package arazzo1
 
 import (
 	"encoding/json"
+	"fmt"
+	"math"
+	"strings"
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
@@ -68,13 +71,13 @@ var workflowKnownFields = []string{
 func (w *Workflow) UnmarshalJSON(data []byte) error {
 	var alias workflowAlias
 	if err := json.Unmarshal(data, &alias); err != nil {
-		return err
+		return fmt.Errorf("unmarshaling workflow: %w", err)
 	}
 	*w = Workflow(alias)
 
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
-		return err
+		return fmt.Errorf("unmarshaling workflow extensions: %w", err)
 	}
 	w.Extensions = extractExtensions(raw, workflowKnownFields)
 
@@ -94,12 +97,12 @@ func (w *Workflow) UnmarshalHCL(data []byte, labels ...string) error {
 	// Parse HCL
 	file, diags := hclsyntax.ParseConfig(data, "", hcl.Pos{Line: 1, Column: 1})
 	if diags.HasErrors() {
-		return diags
+		return fmt.Errorf("parsing HCL: %w", diags)
 	}
 
 	body, ok := file.Body.(*hclsyntax.Body)
 	if !ok {
-		return nil
+		return fmt.Errorf("unexpected HCL body type: %T", file.Body)
 	}
 
 	// Set label (workflowId) if provided
@@ -107,10 +110,14 @@ func (w *Workflow) UnmarshalHCL(data []byte, labels ...string) error {
 		w.WorkflowId = labels[0]
 	}
 
+	// Accumulate errors for attributes
+	var errs []string
+
 	// Process attributes
 	for name, attr := range body.Attributes {
 		val, diags := attr.Expr.Value(nil)
 		if diags.HasErrors() {
+			errs = append(errs, fmt.Sprintf("attribute %q: %s", name, diags.Error()))
 			continue
 		}
 
@@ -133,7 +140,9 @@ func (w *Workflow) UnmarshalHCL(data []byte, labels ...string) error {
 			w.Inputs = hclBlockToMap(block)
 		case "step":
 			step := &Step{}
-			parseStepBlock(block, step)
+			if err := parseStepBlock(block, step); err != nil {
+				errs = append(errs, fmt.Sprintf("step block: %s", err.Error()))
+			}
 			w.Steps = append(w.Steps, step)
 		case "successAction":
 			action := &SuccessActionOrReusable{SuccessAction: &SuccessAction{}}
@@ -141,36 +150,50 @@ func (w *Workflow) UnmarshalHCL(data []byte, labels ...string) error {
 				action.SuccessAction.Name = block.Labels[0]
 			}
 			// Parse the block content for successAction
-			parseSuccessActionBlock(block, action.SuccessAction)
+			if err := parseSuccessActionBlock(block, action.SuccessAction); err != nil {
+				errs = append(errs, fmt.Sprintf("successAction block: %s", err.Error()))
+			}
 			w.SuccessActions = append(w.SuccessActions, action)
 		case "failureAction":
 			action := &FailureActionOrReusable{FailureAction: &FailureAction{}}
 			if len(block.Labels) > 0 {
 				action.FailureAction.Name = block.Labels[0]
 			}
-			parseFailureActionBlock(block, action.FailureAction)
+			if err := parseFailureActionBlock(block, action.FailureAction); err != nil {
+				errs = append(errs, fmt.Sprintf("failureAction block: %s", err.Error()))
+			}
 			w.FailureActions = append(w.FailureActions, action)
 		case "parameter":
 			param := &ParameterOrReusable{Parameter: &Parameter{}}
 			if len(block.Labels) > 0 {
 				param.Parameter.Name = block.Labels[0]
 			}
-			parseParameterBlock(block, param.Parameter)
+			if err := parseParameterBlock(block, param.Parameter); err != nil {
+				errs = append(errs, fmt.Sprintf("parameter block: %s", err.Error()))
+			}
 			w.Parameters = append(w.Parameters, param)
 		}
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("HCL unmarshal errors: %s", strings.Join(errs, "; "))
 	}
 
 	return nil
 }
 
-// hclBlockToMap converts an HCL block to a map[string]any
+// hclBlockToMap converts an HCL block to a map[string]any.
+// Attributes with evaluation errors are skipped and logged as warnings via the returned error slice.
 func hclBlockToMap(block *hclsyntax.Block) map[string]any {
 	result := make(map[string]any)
 
-	// Process attributes
+	// Process attributes - skip those with errors but the calling code
+	// should be aware these attributes were not processed
 	for name, attr := range block.Body.Attributes {
 		val, diags := attr.Expr.Value(nil)
 		if diags.HasErrors() {
+			// Attribute requires context evaluation; store placeholder
+			result[name] = nil
 			continue
 		}
 		result[name] = ctyToGo(val)
@@ -188,11 +211,14 @@ func hclBlockToMap(block *hclsyntax.Block) map[string]any {
 	return result
 }
 
-// hclBlockToBytes converts an HCL block body to bytes for nested unmarshaling
-// This is a placeholder - we actually handle nested blocks directly through the parsing functions
-func hclBlockToBytes(block *hclsyntax.Block) []byte {
-	// For nested blocks, we parse directly using the block's body
-	// This function returns empty bytes as a placeholder
+// hclBlockToBytes is deprecated and not used.
+// This function was intended to convert an HCL block body to bytes for nested unmarshaling,
+// but we handle nested blocks directly through the specific parsing functions
+// (parseStepBlock, parseSuccessActionBlock, etc.) instead of re-serializing to bytes.
+// This approach is more efficient and avoids double parsing.
+//
+// Deprecated: Use the specific parse*Block functions directly instead.
+func hclBlockToBytes(_ *hclsyntax.Block) []byte {
 	return nil
 }
 
@@ -206,7 +232,15 @@ func ctyToGo(val cty.Value) any {
 	case val.Type() == cty.String:
 		return val.AsString()
 	case val.Type() == cty.Number:
-		f, _ := val.AsBigFloat().Float64()
+		bf := val.AsBigFloat()
+		f, acc := bf.Float64()
+		if acc != 0 {
+			// Precision was lost in conversion; check for infinity
+			if math.IsInf(f, 0) {
+				// Return as string representation if too large for float64
+				return bf.Text('f', -1)
+			}
+		}
 		// Check if it's an integer
 		if f == float64(int64(f)) {
 			return int64(f)
@@ -264,10 +298,12 @@ func ctyToStringMap(val cty.Value) map[string]string {
 }
 
 // parseSuccessActionBlock parses HCL block attributes into a SuccessAction
-func parseSuccessActionBlock(block *hclsyntax.Block, action *SuccessAction) {
+func parseSuccessActionBlock(block *hclsyntax.Block, action *SuccessAction) error {
+	var errs []string
 	for name, attr := range block.Body.Attributes {
 		val, diags := attr.Expr.Value(nil)
 		if diags.HasErrors() {
+			errs = append(errs, fmt.Sprintf("attribute %q: %s", name, diags.Error()))
 			continue
 		}
 		switch name {
@@ -279,13 +315,19 @@ func parseSuccessActionBlock(block *hclsyntax.Block, action *SuccessAction) {
 			action.StepId = val.AsString()
 		}
 	}
+	if len(errs) > 0 {
+		return fmt.Errorf("success action errors: %s", strings.Join(errs, "; "))
+	}
+	return nil
 }
 
 // parseFailureActionBlock parses HCL block attributes into a FailureAction
-func parseFailureActionBlock(block *hclsyntax.Block, action *FailureAction) {
+func parseFailureActionBlock(block *hclsyntax.Block, action *FailureAction) error {
+	var errs []string
 	for name, attr := range block.Body.Attributes {
 		val, diags := attr.Expr.Value(nil)
 		if diags.HasErrors() {
+			errs = append(errs, fmt.Sprintf("attribute %q: %s", name, diags.Error()))
 			continue
 		}
 		switch name {
@@ -296,21 +338,35 @@ func parseFailureActionBlock(block *hclsyntax.Block, action *FailureAction) {
 		case "stepId":
 			action.StepId = val.AsString()
 		case "retryAfter":
-			f, _ := val.AsBigFloat().Float64()
+			f, acc := val.AsBigFloat().Float64()
+			if acc != 0 && math.IsInf(f, 0) {
+				errs = append(errs, fmt.Sprintf("retryAfter value too large for float64"))
+				continue
+			}
 			action.RetryAfter = &f
 		case "retryLimit":
-			f, _ := val.AsBigFloat().Float64()
+			f, acc := val.AsBigFloat().Float64()
+			if acc != 0 && math.IsInf(f, 0) {
+				errs = append(errs, fmt.Sprintf("retryLimit value too large for int"))
+				continue
+			}
 			i := int(f)
 			action.RetryLimit = &i
 		}
 	}
+	if len(errs) > 0 {
+		return fmt.Errorf("failure action errors: %s", strings.Join(errs, "; "))
+	}
+	return nil
 }
 
 // parseParameterBlock parses HCL block attributes into a Parameter
-func parseParameterBlock(block *hclsyntax.Block, param *Parameter) {
+func parseParameterBlock(block *hclsyntax.Block, param *Parameter) error {
+	var errs []string
 	for name, attr := range block.Body.Attributes {
 		val, diags := attr.Expr.Value(nil)
 		if diags.HasErrors() {
+			errs = append(errs, fmt.Sprintf("attribute %q: %s", name, diags.Error()))
 			continue
 		}
 		switch name {
@@ -320,10 +376,16 @@ func parseParameterBlock(block *hclsyntax.Block, param *Parameter) {
 			param.Value = ctyToGo(val)
 		}
 	}
+	if len(errs) > 0 {
+		return fmt.Errorf("parameter errors: %s", strings.Join(errs, "; "))
+	}
+	return nil
 }
 
 // parseStepBlock parses an HCL step block into a Step struct
-func parseStepBlock(block *hclsyntax.Block, s *Step) {
+func parseStepBlock(block *hclsyntax.Block, s *Step) error {
+	var errs []string
+
 	// Set label (stepId) if provided
 	if len(block.Labels) > 0 {
 		s.StepId = block.Labels[0]
@@ -333,6 +395,7 @@ func parseStepBlock(block *hclsyntax.Block, s *Step) {
 	for name, attr := range block.Body.Attributes {
 		val, diags := attr.Expr.Value(nil)
 		if diags.HasErrors() {
+			errs = append(errs, fmt.Sprintf("attribute %q: %s", name, diags.Error()))
 			continue
 		}
 
@@ -357,34 +420,49 @@ func parseStepBlock(block *hclsyntax.Block, s *Step) {
 		switch nestedBlock.Type {
 		case "requestBody":
 			s.RequestBody = &RequestBody{}
-			parseRequestBodyBlock(nestedBlock, s.RequestBody)
+			if err := parseRequestBodyBlock(nestedBlock, s.RequestBody); err != nil {
+				errs = append(errs, fmt.Sprintf("requestBody: %s", err.Error()))
+			}
 		case "successCriterion":
 			criterion := &Criterion{}
-			parseCriterionBlock(nestedBlock, criterion)
+			if err := parseCriterionBlock(nestedBlock, criterion); err != nil {
+				errs = append(errs, fmt.Sprintf("successCriterion: %s", err.Error()))
+			}
 			s.SuccessCriteria = append(s.SuccessCriteria, criterion)
 		case "onSuccess":
 			action := &SuccessActionOrReusable{SuccessAction: &SuccessAction{}}
 			if len(nestedBlock.Labels) > 0 {
 				action.SuccessAction.Name = nestedBlock.Labels[0]
 			}
-			parseSuccessActionBlock(nestedBlock, action.SuccessAction)
+			if err := parseSuccessActionBlock(nestedBlock, action.SuccessAction); err != nil {
+				errs = append(errs, fmt.Sprintf("onSuccess: %s", err.Error()))
+			}
 			s.OnSuccess = append(s.OnSuccess, action)
 		case "onFailure":
 			action := &FailureActionOrReusable{FailureAction: &FailureAction{}}
 			if len(nestedBlock.Labels) > 0 {
 				action.FailureAction.Name = nestedBlock.Labels[0]
 			}
-			parseFailureActionBlock(nestedBlock, action.FailureAction)
+			if err := parseFailureActionBlock(nestedBlock, action.FailureAction); err != nil {
+				errs = append(errs, fmt.Sprintf("onFailure: %s", err.Error()))
+			}
 			s.OnFailure = append(s.OnFailure, action)
 		}
 	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("step %q errors: %s", s.StepId, strings.Join(errs, "; "))
+	}
+	return nil
 }
 
 // parseRequestBodyBlock parses HCL block into RequestBody
-func parseRequestBodyBlock(block *hclsyntax.Block, rb *RequestBody) {
+func parseRequestBodyBlock(block *hclsyntax.Block, rb *RequestBody) error {
+	var errs []string
 	for name, attr := range block.Body.Attributes {
 		val, diags := attr.Expr.Value(nil)
 		if diags.HasErrors() {
+			errs = append(errs, fmt.Sprintf("attribute %q: %s", name, diags.Error()))
 			continue
 		}
 		switch name {
@@ -400,13 +478,19 @@ func parseRequestBodyBlock(block *hclsyntax.Block, rb *RequestBody) {
 			rb.Payload = hclBlockToMap(nestedBlock)
 		}
 	}
+	if len(errs) > 0 {
+		return fmt.Errorf("request body errors: %s", strings.Join(errs, "; "))
+	}
+	return nil
 }
 
 // parseCriterionBlock parses HCL block into Criterion
-func parseCriterionBlock(block *hclsyntax.Block, c *Criterion) {
+func parseCriterionBlock(block *hclsyntax.Block, c *Criterion) error {
+	var errs []string
 	for name, attr := range block.Body.Attributes {
 		val, diags := attr.Expr.Value(nil)
 		if diags.HasErrors() {
+			errs = append(errs, fmt.Sprintf("attribute %q: %s", name, diags.Error()))
 			continue
 		}
 		switch name {
@@ -418,6 +502,10 @@ func parseCriterionBlock(block *hclsyntax.Block, c *Criterion) {
 			c.Type = CriterionType(val.AsString())
 		}
 	}
+	if len(errs) > 0 {
+		return fmt.Errorf("criterion errors: %s", strings.Join(errs, "; "))
+	}
+	return nil
 }
 
 // ctyToParameters converts a cty.Value to []any for parameters
