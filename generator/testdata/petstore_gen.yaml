@@ -21,7 +21,6 @@ workflows:
       outputs:
         available: $steps.getPetStep.outputs.availablePets
       depends_on: []
-      parameters: []
       success_actions: []
       failure_actions: []
       steps:

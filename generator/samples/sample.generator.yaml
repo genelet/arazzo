@@ -1,0 +1,73 @@
+provider:
+  name: sample-provider
+  server_url: https://api.staging.example.com/v1 # Overriding server URL
+
+workflows:
+  - workflow_id: full-demo-workflow
+    summary: Demonstrates all generator features
+    description: A comprehensive workflow showing parameters, inputs, outputs, and request bodies.
+    
+    # 1. Inputs: Runtime arguments for the workflow
+    inputs:
+      type: object
+      properties:
+        username: { type: string }
+        password: { type: string }
+        targetUserId: { type: integer }
+      required: [username, password, targetUserId]
+
+    # 2. Outputs: Final return values of the workflow
+    outputs:
+      authToken: $steps.login.outputs.token
+      userName: $steps.fetchUser.outputs.name
+
+    steps:
+      # Step A: Login (Demonstrates RequestBody auto-generation and Output extraction)
+      - name: login
+        operationId: login
+        # requestBody: null # LEAVE EMPTY -> Auto-generated from OpenAPI example ("demo_user")
+        outputs:
+          token: $response.body.token
+        success_criteria: # Auto-generated ($statusCode == 200) if omitted
+          - condition: $statusCode == 200
+
+      # Step B: Get User (Demonstrates Parameters modes)
+      - name: fetchUser
+        operationId: getUser
+        parameters:
+          # Mode 1: Auto-include mandatory 'id' (mapped to $inputs.id, but here strictly 'targetUserId')
+          # Wait, auto-gen defaults to $inputs.id. If we want $inputs.targetUserId, we MUST override!
+          - name: id
+            in: path
+            value: $inputs.targetUserId
+          # Mode 2: Explicitly request optional parameter
+          - "verbose" # Will become { name: "verbose", in: "query", value: "$inputs.verbose" }
+          # Mode 3: Explicit assignment for optional header
+          - name: X-Trace-Id
+            in: header
+            value: "trace-12345"
+        outputs:
+          name: $response.body.name
+
+      # Step C: Update Profile (Demonstrates Explicit Simple RequestBody)
+      - name: updateProfile
+        operationId: updateProfile
+        parameters:
+          # We can just leave 'id' to auto-generate from $inputs.id?
+          # But our input is called 'targetUserId', so let's override again or just assume input match.
+          # Let's override to show explicit value
+          - name: id
+            in: path
+            value: 999 
+        # Explicit Simple RequestBody (Mode 1)
+        request_body:
+          bio: "Updated bio from generator"
+          website: "https://genelet.com"
+        
+        # Demonstrating OnSuccess / OnFailure actions
+        on_success:
+          - name: logSuccess
+            type: "schema" # hypothetical action type
+        on_failure:
+          - name: logFailure
+            type: "schema"

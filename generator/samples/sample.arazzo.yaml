@@ -1,0 +1,75 @@
+arazzo: 1.0.0
+info:
+    title: Generated Arazzo from Comprehensive Sample API
+    summary: Generated from /home/peter/Working/arazzo/generator/samples/sample.openapi.yaml
+    version: 1.0.0
+sourceDescriptions:
+    - name: sample-provider
+      url: /home/peter/Working/arazzo/generator/samples/sample.openapi.yaml
+      type: openapi
+workflows:
+    - workflowId: full-demo-workflow
+      summary: Demonstrates all generator features
+      description: A comprehensive workflow showing parameters, inputs, outputs, and request bodies.
+      inputs:
+        properties:
+            password:
+                type: string
+            targetUserId:
+                type: integer
+            username:
+                type: string
+        required:
+            - username
+            - password
+            - targetUserId
+        type: object
+      steps:
+        - stepId: login
+          operationId: $source.login
+          requestBody:
+            contentType: application/json
+            payload:
+                password: demo_password
+                username: demo_user
+          successCriteria:
+            - condition: $statusCode == 200
+          outputs:
+            token: $response.body.token
+        - stepId: fetchUser
+          operationId: $source.fetchUser
+          parameters:
+            - in: path
+              name: id
+              value: $inputs.targetUserId
+            - verbose
+            - in: header
+              name: X-Trace-Id
+              value: trace-12345
+          successCriteria:
+            - condition: $statusCode == 200
+          outputs:
+            name: $response.body.name
+        - stepId: updateProfile
+          operationId: $source.updateProfile
+          parameters:
+            - in: path
+              name: id
+              value: 999
+          requestBody:
+            contentType: application/json
+            payload:
+                bio: Updated bio from generator
+                website: https://genelet.com
+          successCriteria:
+            - condition: $statusCode == 200
+            - condition: $statusCode == 204
+          onSuccess:
+            - successaction: null
+              reusable: null
+          onFailure:
+            - failureaction: null
+              reusable: null
+      outputs:
+        authToken: $steps.login.outputs.token
+        userName: $steps.fetchUser.outputs.name

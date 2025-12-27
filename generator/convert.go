@@ -144,7 +144,6 @@ func NewGeneratorFromArazzo(arazzoFile, openapiFile string) (*Generator, error) 
 			Inputs:         wf.Inputs,
 			Outputs:        wf.Outputs,
 			DependsOn:      wf.DependsOn,
-			Parameters:     wf.Parameters,
 			SuccessActions: wf.SuccessActions,
 			FailureActions: wf.FailureActions,
 			Extensions:     wf.Extensions,
@@ -244,7 +243,6 @@ func (g *Generator) ToArazzo(openapiFilename string) (*arazzo1.Arazzo, error) {
 			Inputs:         wfSpec.Inputs,
 			DependsOn:      wfSpec.DependsOn,
 			Outputs:        wfSpec.Outputs,
-			Parameters:     wfSpec.Parameters,
 			SuccessActions: wfSpec.SuccessActions,
 			FailureActions: wfSpec.FailureActions,
 			Extensions:     wfSpec.Extensions,
@@ -256,12 +254,43 @@ func (g *Generator) ToArazzo(openapiFilename string) (*arazzo1.Arazzo, error) {
 			step := &arazzo1.Step{
 				StepId:          op.Name,
 				Description:     op.Description,
-				RequestBody:     op.RequestBody,
 				SuccessCriteria: op.SuccessCriteria,
 				OnSuccess:       op.OnSuccess,
 				OnFailure:       op.OnFailure,
 				Extensions:      op.Extensions,
 				Outputs:         op.Outputs,
+			}
+
+			// Handle RequestBody (which is now interface{})
+			if op.RequestBody != nil {
+				// 1. If it's a map/struct matching Arazzo, use it fully
+				// 2. If it's raw data, assume it's the Payload
+				if rbStruct, ok := op.RequestBody.(*arazzo1.RequestBody); ok {
+					step.RequestBody = rbStruct
+				} else if rbMap, ok := op.RequestBody.(map[string]interface{}); ok {
+					// Check if it looks like a RequestBody (has "payload" key, maybe "replacements")
+					// Use heuristics or just convert it?
+					// Actually, simpler: if user provided a map that *is* the payload, we treat it as payload.
+					// If user provided a map with "payload" key, they mean the struct.
+					// Let's assume if "payload" key exists, it is the struct.
+					if _, hasPayload := rbMap["payload"]; hasPayload {
+						// Convert map to struct ... simplistic way via JSON to avoid manual mapping
+						b, _ := json.Marshal(rbMap)
+						var rb arazzo1.RequestBody
+						_ = json.Unmarshal(b, &rb)
+						step.RequestBody = &rb
+					} else {
+						// Treat entire map as Payload
+						step.RequestBody = &arazzo1.RequestBody{
+							Payload: rbMap,
+						}
+					}
+				} else {
+					// Raw value (string, int, etc.) -> Payload
+					step.RequestBody = &arazzo1.RequestBody{
+						Payload: op.RequestBody,
+					}
+				}
 			}
 
 			// Handle Target (Operation vs Workflow)
@@ -336,31 +365,93 @@ func enrichStepFromOpenAPI(step *arazzo1.Step, doc *openapi31.OpenAPI) {
 		return
 	}
 
-	// Enrichment Logic 1: Auto-fill 'in' for parameters
+	// Enrichment Logic 1: Auto-fill 'in' for parameters and Auto-include required parameters
+	// First, normalize existing parameters and collect names
+	existingParams := make(map[string]bool)
+	var newParams []interface{}
+
 	for _, pFunc := range step.Parameters {
-		// pFunc is an interface{}. It might be a map (if from YAML) or a *Parameter (if from struct/code).
-		pMap, ok := pFunc.(map[string]interface{})
-		if !ok {
-			// Try struct?
-			if pStruct, ok := pFunc.(*arazzo1.Parameter); ok {
-				enrichParameterStruct(pStruct, op)
+		// Handle string requests (e.g. "X-Trace-Id")
+		if name, ok := pFunc.(string); ok {
+			// Find this param in OpenAPI
+			found := false
+			for _, oasP := range op.Parameters {
+				if oasP.Name == name {
+					param := &arazzo1.Parameter{
+						Name:  oasP.Name,
+						In:    arazzo1.ParameterIn(oasP.In),
+						Value: "$inputs." + oasP.Name, // Default value
+					}
+					newParams = append(newParams, param)
+					existingParams[name] = true
+					found = true
+					break
+				}
+			}
+			if !found {
+				// If not found in OpenAPI, keep it as is (maybe user knows better or it's extra)
+				// But Arazzo Step.Parameters expects *Parameter or map, not string.
+				// However, if we are generating, we likely want to resolve it now.
+				// If we can't resolve it, we should probably warn or skip.
+				// For now, let's convert it to a basic Parameter to avoid type issues later
+				param := &arazzo1.Parameter{
+					Name:  name,
+					Value: "$inputs." + name,
+				}
+				newParams = append(newParams, param)
+				existingParams[name] = true
 			}
 			continue
 		}
 
-		name, _ := pMap["name"].(string)
-		inVal, _ := pMap["in"].(string)
-
-		if name != "" && inVal == "" {
-			// Look for param in OpenAPI
-			for _, oasP := range op.Parameters {
-				if oasP.Name == name {
-					pMap["in"] = oasP.In
-					break
+		// Handle existing maps/structs
+		var name string
+		if pMap, ok := pFunc.(map[string]interface{}); ok {
+			name, _ = pMap["name"].(string)
+			inVal, _ := pMap["in"].(string)
+			if name != "" && inVal == "" {
+				for _, oasP := range op.Parameters {
+					if oasP.Name == name {
+						pMap["in"] = oasP.In
+						break
+					}
 				}
 			}
+			newParams = append(newParams, pMap)
+		} else if pStruct, ok := pFunc.(*arazzo1.Parameter); ok {
+			name = pStruct.Name
+			enrichParameterStruct(pStruct, op)
+			newParams = append(newParams, pStruct)
+		} else {
+			// Unknown type, keep it
+			newParams = append(newParams, pFunc)
+		}
+
+		if name != "" {
+			existingParams[name] = true
 		}
 	}
+
+	// Second, Auto-include Mandatory Parameters from OpenAPI
+	for _, oasP := range op.Parameters {
+		if _, exists := existingParams[oasP.Name]; exists {
+			continue
+		}
+		// Logic: Include if Required is true AND NOT Deprecated
+		// If Deprecated is true, we skip even if Required (unless user explicitly requested it above)
+		if oasP.Required && !oasP.Deprecated {
+			param := &arazzo1.Parameter{
+				Name:  oasP.Name,
+				In:    arazzo1.ParameterIn(oasP.In),
+				Value: "$inputs." + oasP.Name,
+			}
+			newParams = append(newParams, param)
+		}
+	}
+
+	step.Parameters = newParams
+
+	// Enrichment Logic 2: Security Parameters
 
 	// Enrichment Logic 2: Security Parameters
 	if len(op.Security) > 0 && doc.Components != nil && doc.Components.SecuritySchemes != nil {
