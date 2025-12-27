@@ -195,62 +195,6 @@ func main() {
 }
 ```
 
-### Using Criterion with Expression Types
-
-```go
-package main
-
-import (
-    "encoding/json"
-    "fmt"
-
-    "github.com/genelet/arazzo/arazzo1"
-)
-
-func main() {
-    step := &arazzo1.Step{
-        StepId:      "validate-response",
-        OperationId: "getUser",
-        SuccessCriteria: []*arazzo1.Criterion{
-            // Simple condition
-            {
-                Condition: "$statusCode == 200",
-                Type:      arazzo1.CriterionTypeSimple,
-            },
-            // Regex condition
-            {
-                Context:   "$response.header.Content-Type",
-                Condition: "^application/json.*",
-                Type:      arazzo1.CriterionTypeRegex,
-            },
-            // JSONPath with expression type (includes version)
-            {
-                Context:   "$response.body",
-                Condition: "$.user.email",
-                Type:      arazzo1.CriterionTypeJSONPath,
-                ExpressionType: &arazzo1.CriterionExpressionType{
-                    Type:    arazzo1.CriterionTypeJSONPath,
-                    Version: "draft-goessner-dispatch-jsonpath-00",
-                },
-            },
-            // XPath with expression type
-            {
-                Context:   "$response.body",
-                Condition: "//user/email/text()",
-                Type:      arazzo1.CriterionTypeXPath,
-                ExpressionType: &arazzo1.CriterionExpressionType{
-                    Type:    arazzo1.CriterionTypeXPath,
-                    Version: "xpath-30",
-                },
-            },
-        },
-    }
-
-    output, _ := json.MarshalIndent(step, "", "  ")
-    fmt.Println(string(output))
-}
-```
-
 ## Type Reference
 
 ### Main Types
