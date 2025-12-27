@@ -7,58 +7,61 @@ provider:
         info_summary: This workflow showcases how to purchase a pet through a sequence of API calls
         info_title: A pet purchasing workflow
         info_version: 1.0.1
-http:
-    - name: loginStep
-      description: This step demonstrates the user login step
-      parameters:
-        - name: username
-          in: query
-          value: $inputs.username
-        - name: password
-          in: query
-          value: $inputs.password
-      request_body: null
-      success_criteria:
-        - condition: $statusCode == 200
-      on_success: []
-      on_failure: []
+workflows:
+    - workflow_id: loginUserRetrievePet
+      summary: Login User and then retrieve pets
+      description: This procedure lays out the steps to login a user and then retrieve pets
+      inputs:
+        properties:
+            password:
+                type: string
+            username:
+                type: string
+        type: object
       outputs:
-        rateLimit: $response.header.X-Rate-Limit
-        sessionToken: $response.body
-        tokenExpires: $response.header.X-Expires-After
-      operation_path: ""
-      operation_id: $sourceDescriptions.petStoreDescription.loginUser
-    - name: getPetStep
-      description: retrieve a pet by status from the GET pets endpoint
-      parameters:
-        - name: status
-          in: query
-          value: available
-        - name: Authorization
-          in: header
-          value: $steps.loginStep.outputs.sessionToken
-      request_body: null
-      success_criteria:
-        - condition: $statusCode == 200
-      on_success: []
-      on_failure: []
-      outputs:
-        availablePets: $response.body
-      operation_path: '{$sourceDescriptions.petStoreDescription.url}#/paths/~1pet~1findByStatus'
-      operation_id: ""
-name: loginUserRetrievePet
-summary: Login User and then retrieve pets
-description: This procedure lays out the steps to login a user and then retrieve pets
-inputs:
-    properties:
-        password:
-            type: string
-        username:
-            type: string
-    type: object
-outputs:
-    available: $steps.getPetStep.outputs.availablePets
-depends_on: []
-parameters: []
-success_actions: []
-failure_actions: []
+        available: $steps.getPetStep.outputs.availablePets
+      depends_on: []
+      parameters: []
+      success_actions: []
+      failure_actions: []
+      steps:
+        - name: loginStep
+          description: This step demonstrates the user login step
+          parameters:
+            - in: query
+              name: username
+              value: $inputs.username
+            - in: query
+              name: password
+              value: $inputs.password
+          request_body: null
+          success_criteria:
+            - condition: $statusCode == 200
+          on_success: []
+          on_failure: []
+          outputs:
+            rateLimit: $response.header.X-Rate-Limit
+            sessionToken: $response.body
+            tokenExpires: $response.header.X-Expires-After
+          operation_path: ""
+          operation_id: $sourceDescriptions.petStoreDescription.loginUser
+          workflow_id: ""
+        - name: getPetStep
+          description: retrieve a pet by status from the GET pets endpoint
+          parameters:
+            - in: query
+              name: status
+              value: available
+            - in: header
+              name: Authorization
+              value: $steps.loginStep.outputs.sessionToken
+          request_body: null
+          success_criteria:
+            - condition: $statusCode == 200
+          on_success: []
+          on_failure: []
+          outputs:
+            availablePets: $response.body
+          operation_path: '{$sourceDescriptions.petStoreDescription.url}#/paths/~1pet~1findByStatus'
+          operation_id: ""
+          workflow_id: ""

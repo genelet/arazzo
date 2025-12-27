@@ -113,6 +113,8 @@ func NewGeneratorFromArazzo(arazzoFile, openapiFile string) (*Generator, error) 
 			Name:      "my-source", // Default
 			ServerURL: "",          // Default empty
 		},
+		Components: az.Components,
+		Extensions: az.Extensions,
 	}
 
 	if len(doc.Servers) > 0 {
@@ -133,81 +135,56 @@ func NewGeneratorFromArazzo(arazzoFile, openapiFile string) (*Generator, error) 
 		gen.Provider.Appendices["info_description"] = az.Info.Description
 	}
 
-	// Iterate workflows to build operations
+	// Iterate workflows
 	for _, wf := range az.Workflows {
-		// Populate high-fidelity workflow fields
-		gen.Name = wf.WorkflowId
-		gen.Summary = wf.Summary
-		gen.Description = wf.Description
-		gen.Inputs = wf.Inputs
-		if wf.Outputs != nil {
-			gen.Outputs = make(map[string]interface{})
-			for k, v := range wf.Outputs {
-				gen.Outputs[k] = v
-			}
-		}
-
-		gen.DependsOn = wf.DependsOn
-		// Copy workflow parameters
-		for _, pOrRef := range wf.Parameters {
-			if pOrRef.Parameter != nil {
-				gen.Parameters = append(gen.Parameters, pOrRef.Parameter)
-			}
-			// Note: Reusable parameters are ignored for now if not inline
+		spec := &WorkflowSpec{
+			WorkflowId:     wf.WorkflowId,
+			Summary:        wf.Summary,
+			Description:    wf.Description,
+			Inputs:         wf.Inputs,
+			Outputs:        wf.Outputs,
+			DependsOn:      wf.DependsOn,
+			Parameters:     wf.Parameters,
+			SuccessActions: wf.SuccessActions,
+			FailureActions: wf.FailureActions,
+			Extensions:     wf.Extensions,
 		}
 
 		for _, step := range wf.Steps {
-			// Expected format: $source.operationId or $sourceDescriptions.name.operationId
 			opID := step.OperationId
 			if idx := strings.LastIndex(opID, "."); idx != -1 {
 				opID = opID[idx+1:]
 			}
 
-			// Handle OperationPath if OperationId is empty
-			opPath := step.OperationPath
-
-			if opID == "" && opPath == "" {
-				continue // Skip if neither ID nor Path is useful
+			// Infer name
+			name := step.StepId
+			if name == "" {
+				name = step.OperationId
 			}
 
 			op := &OperationSpec{
-				Name:          step.StepId, // Use StepId for the Name (critical for references)
-				Description:   step.Description,
-				OperationPath: step.OperationPath,
-				OperationId:   step.OperationId, // Original full ID
+				Name:            name,
+				Description:     step.Description,
+				OperationPath:   step.OperationPath,
+				OperationId:     step.OperationId,
+				WorkflowId:      step.WorkflowId,
+				Extensions:      step.Extensions,
+				RequestBody:     step.RequestBody,
+				SuccessCriteria: step.SuccessCriteria,
+				OnSuccess:       step.OnSuccess,
+				OnFailure:       step.OnFailure,
+				Outputs:         step.Outputs,
 			}
-			// (op.Summary removed from struct above/init logic if not supported by Step, but I added it to struct. Step DOES NOT have Summary in Arazzo struct. So leaving empty.)
 
 			// Copy parameters
-			for _, pRaw := range step.Parameters {
-				// pRaw is interface{}, likely map[string]interface{}
-				// We want to convert it to *arazzo1.Parameter
-				// Best way is JSON round-trip for robustness
-				b, err := json.Marshal(pRaw)
-				if err == nil {
-					var p arazzo1.Parameter
-					if err := json.Unmarshal(b, &p); err == nil {
-						op.Parameters = append(op.Parameters, &p)
-					}
-				}
+			if len(step.Parameters) > 0 {
+				op.Parameters = make([]interface{}, len(step.Parameters))
+				copy(op.Parameters, step.Parameters)
 			}
 
-			// Copy outputs
-			if step.Outputs != nil {
-				op.Outputs = make(map[string]interface{})
-				for k, v := range step.Outputs {
-					op.Outputs[k] = v
-				}
-			}
-
-			// Copy new fields
-			op.RequestBody = step.RequestBody
-			op.SuccessCriteria = step.SuccessCriteria
-			op.OnSuccess = step.OnSuccess
-			op.OnFailure = step.OnFailure
-
-			gen.HTTP = append(gen.HTTP, op)
+			spec.Steps = append(spec.Steps, op)
 		}
+		gen.Workflows = append(gen.Workflows, spec)
 	}
 
 	return gen, nil
@@ -229,18 +206,14 @@ func (g *Generator) ToArazzo(openapiFilename string) (*arazzo1.Arazzo, error) {
 		},
 		SourceDescriptions: []*arazzo1.SourceDescription{
 			{
-				Name: g.Provider.Name,
-				URL:  openapiFilename,
-				Type: arazzo1.SourceDescriptionTypeOpenAPI,
+				Name:       g.Provider.Name,
+				URL:        openapiFilename,
+				Type:       arazzo1.SourceDescriptionTypeOpenAPI,
+				Extensions: g.Provider.Extensions,
 			},
 		},
-		Workflows: []*arazzo1.Workflow{
-			{
-				WorkflowId: "main-workflow",
-				Summary:    "Main workflow containing all operations",
-				Steps:      []*arazzo1.Step{},
-			},
-		},
+		Components: g.Components,
+		Extensions: g.Extensions,
 	}
 
 	// Restore Info from Appendices if available
@@ -259,93 +232,289 @@ func (g *Generator) ToArazzo(openapiFilename string) (*arazzo1.Arazzo, error) {
 		}
 	}
 
-	// Collect all operations
-	// Collect all operations
-	var operations []*OperationSpec
-	operations = append(operations, g.HTTP...)
-
-	if len(operations) == 0 {
-		return nil, fmt.Errorf("no operations found in generator config")
+	if len(g.Workflows) == 0 {
+		return nil, fmt.Errorf("no workflows found in generator config")
 	}
 
-	// Create steps
-	for _, op := range operations {
-		step := &arazzo1.Step{
-			StepId:      op.Name,
-			Description: op.Description,
-			// parameters and outputs below
+	for _, wfSpec := range g.Workflows {
+		wf := &arazzo1.Workflow{
+			WorkflowId:     wfSpec.WorkflowId,
+			Summary:        wfSpec.Summary,
+			Description:    wfSpec.Description,
+			Inputs:         wfSpec.Inputs,
+			DependsOn:      wfSpec.DependsOn,
+			Outputs:        wfSpec.Outputs,
+			Parameters:     wfSpec.Parameters,
+			SuccessActions: wfSpec.SuccessActions,
+			FailureActions: wfSpec.FailureActions,
+			Extensions:     wfSpec.Extensions,
+			Steps:          []*arazzo1.Step{},
 		}
 
-		if len(op.SuccessCriteria) > 0 {
-			step.SuccessCriteria = op.SuccessCriteria
-		} else {
-			step.SuccessCriteria = []*arazzo1.Criterion{
-				{
-					Condition: "$statusCode == 200",
-				},
+		// Create steps
+		for _, op := range wfSpec.Steps {
+			step := &arazzo1.Step{
+				StepId:          op.Name,
+				Description:     op.Description,
+				RequestBody:     op.RequestBody,
+				SuccessCriteria: op.SuccessCriteria,
+				OnSuccess:       op.OnSuccess,
+				OnFailure:       op.OnFailure,
+				Extensions:      op.Extensions,
+				Outputs:         op.Outputs,
 			}
-		}
 
-		step.RequestBody = op.RequestBody
-		step.OnSuccess = op.OnSuccess
-		step.OnFailure = op.OnFailure
-
-		// Handle Operation Reference
-		if op.OperationId != "" {
-			step.OperationId = op.OperationId
-		} else if op.OperationPath != "" {
-			step.OperationPath = op.OperationPath
-		} else {
-			// Default fallback
-			step.OperationId = "$source." + op.Name
-		}
-
-		// Handle Parameters
-		if len(op.Parameters) > 0 {
-			step.Parameters = make([]any, len(op.Parameters))
-			for i, p := range op.Parameters {
-				step.Parameters[i] = p
+			// Handle Target (Operation vs Workflow)
+			if op.WorkflowId != "" {
+				step.WorkflowId = op.WorkflowId
+			} else if op.OperationId != "" {
+				step.OperationId = op.OperationId
+			} else if op.OperationPath != "" {
+				step.OperationPath = op.OperationPath
+			} else {
+				// Default fallback
+				step.OperationId = "$source." + op.Name
 			}
-		}
 
-		// Handle Outputs
-		if len(op.Outputs) > 0 {
-			step.Outputs = make(map[string]string)
-			for k, v := range op.Outputs {
-				step.Outputs[k] = fmt.Sprint(v)
+			// Copy Parameters
+			step.Parameters = op.Parameters
+
+			// Enrichment: This might modify Parameters, RequestBody, SuccessCriteria
+			enrichStepFromOpenAPI(step, g.openapiDoc)
+
+			// Add default success criteria if still missing (fallback)
+			if len(step.SuccessCriteria) == 0 {
+				step.SuccessCriteria = []*arazzo1.Criterion{
+					{
+						Condition: "$statusCode == 200",
+					},
+				}
 			}
-		}
 
-		arazzo.Workflows[0].Steps = append(arazzo.Workflows[0].Steps, step)
-	}
-
-	// Update Workflow details from Generator if present
-	if g.Name != "" {
-		arazzo.Workflows[0].WorkflowId = g.Name
-	}
-	if g.Summary != "" {
-		arazzo.Workflows[0].Summary = g.Summary
-	}
-	if g.Description != "" {
-		arazzo.Workflows[0].Description = g.Description
-	}
-	if g.Inputs != nil {
-		arazzo.Workflows[0].Inputs = g.Inputs
-	}
-	if len(g.Outputs) > 0 {
-		arazzo.Workflows[0].Outputs = make(map[string]string)
-		for k, v := range g.Outputs {
-			arazzo.Workflows[0].Outputs[k] = fmt.Sprint(v)
+			wf.Steps = append(wf.Steps, step)
 		}
-	}
-	if len(g.DependsOn) > 0 {
-		arazzo.Workflows[0].DependsOn = g.DependsOn
-	}
-	if len(g.Parameters) > 0 {
-		for _, p := range g.Parameters {
-			arazzo.Workflows[0].Parameters = append(arazzo.Workflows[0].Parameters, &arazzo1.ParameterOrReusable{Parameter: p})
-		}
+		arazzo.Workflows = append(arazzo.Workflows, wf)
 	}
 
 	return arazzo, nil
+}
+
+// enrichStepFromOpenAPI looks up the operation in the OpenAPI doc and enriches the step parameters.
+func enrichStepFromOpenAPI(step *arazzo1.Step, doc *openapi31.OpenAPI) {
+	if step.WorkflowId != "" {
+		return // Cannot enrich workflow steps from OpenAPI
+	}
+
+	// Find operation
+	var op *openapi31.Operation
+	// Simple lookup by OperationId
+	opID := step.OperationId
+	// Remove source prefix if present (e.g., "$source.petId")
+	if idx := strings.LastIndex(opID, "."); idx != -1 {
+		opID = opID[idx+1:]
+	}
+
+	if opID != "" && doc.Paths != nil {
+		for _, pathItem := range doc.Paths.Paths {
+			ops := []*openapi31.Operation{pathItem.Get, pathItem.Put, pathItem.Post, pathItem.Delete, pathItem.Options, pathItem.Head, pathItem.Patch, pathItem.Trace}
+			for _, o := range ops {
+				if o != nil && o.OperationID == opID {
+					op = o
+					break
+				}
+			}
+			if op != nil {
+				break
+			}
+		}
+	} else if step.OperationPath != "" {
+		// Attempt resolution by path
+		op = resolveOperationByPath(doc, step.OperationPath)
+	}
+
+	if op == nil {
+		return
+	}
+
+	// Enrichment Logic 1: Auto-fill 'in' for parameters
+	for _, pFunc := range step.Parameters {
+		// pFunc is an interface{}. It might be a map (if from YAML) or a *Parameter (if from struct/code).
+		pMap, ok := pFunc.(map[string]interface{})
+		if !ok {
+			// Try struct?
+			if pStruct, ok := pFunc.(*arazzo1.Parameter); ok {
+				enrichParameterStruct(pStruct, op)
+			}
+			continue
+		}
+
+		name, _ := pMap["name"].(string)
+		inVal, _ := pMap["in"].(string)
+
+		if name != "" && inVal == "" {
+			// Look for param in OpenAPI
+			for _, oasP := range op.Parameters {
+				if oasP.Name == name {
+					pMap["in"] = oasP.In
+					break
+				}
+			}
+		}
+	}
+
+	// Enrichment Logic 2: Security Parameters
+	if len(op.Security) > 0 && doc.Components != nil && doc.Components.SecuritySchemes != nil {
+		// Just take the first requirement set for now
+		req := op.Security[0]
+		for name := range req {
+			if schemeRef, ok := doc.Components.SecuritySchemes[name]; ok {
+				// schemeRef might be a reference or value. Assuming value usage simplified for now as generator is mostly reader
+				// Actually openapi31.SecuritySchemes is map[string]*SecurityScheme|Reference
+				// We need to resolve it. But typically it's direct in components.
+				// In genelet/oas/openapi31, SecurityScheme is struct.
+				if schemeRef.Type == "apiKey" {
+					// Add parameter
+					param := arazzo1.Parameter{
+						Name:  schemeRef.Name,
+						In:    arazzo1.ParameterIn(schemeRef.In),
+						Value: "$inputs." + name, // Heuristic default
+					}
+					// Only add if not present
+					if !parameterExists(step.Parameters, param.Name) {
+						step.Parameters = append(step.Parameters, &param)
+					}
+				} else if schemeRef.Type == "http" {
+					headerName := "Authorization"
+					if !parameterExists(step.Parameters, headerName) {
+						param := arazzo1.Parameter{
+							Name:  headerName,
+							In:    arazzo1.ParameterInHeader, // Authorization is always header
+							Value: "$inputs." + name,
+						}
+						step.Parameters = append(step.Parameters, &param)
+					}
+				}
+			}
+		}
+	}
+
+	// Enrichment Logic 3: Dynamic Success Criteria
+	if len(step.SuccessCriteria) == 0 && op.Responses != nil && len(op.Responses.StatusCode) > 0 {
+		for code := range op.Responses.StatusCode {
+			// Check for 2xx codes strings
+			if strings.HasPrefix(code, "2") {
+				step.SuccessCriteria = append(step.SuccessCriteria, &arazzo1.Criterion{
+					Condition: fmt.Sprintf("$statusCode == %s", code),
+				})
+			}
+		}
+	}
+
+	// Enrichment Logic 4: Request Body Content-Type and Payload
+	if op.RequestBody != nil && len(op.RequestBody.Content) > 0 {
+		if step.RequestBody == nil {
+			step.RequestBody = &arazzo1.RequestBody{}
+		}
+
+		if step.RequestBody.ContentType == "" {
+			// Pick first content type
+			for ct, mediaType := range op.RequestBody.Content {
+				step.RequestBody.ContentType = ct
+
+				// Payload Scaffolding
+				if step.RequestBody.Payload == nil {
+					if mediaType.Example != nil {
+						step.RequestBody.Payload = mediaType.Example
+					} else if len(mediaType.Examples) > 0 {
+						// Pick first example
+						for _, ex := range mediaType.Examples {
+							step.RequestBody.Payload = ex.Value
+							break
+						}
+					}
+				}
+				break
+			}
+		}
+	}
+}
+
+func enrichParameterStruct(p *arazzo1.Parameter, op *openapi31.Operation) {
+	if p.Name != "" && p.In == "" {
+		for _, oasP := range op.Parameters {
+			if oasP.Name == p.Name {
+				p.In = arazzo1.ParameterIn(oasP.In)
+				break
+			}
+		}
+	}
+}
+
+func parameterExists(params []any, name string) bool {
+	for _, p := range params {
+		if pMap, ok := p.(map[string]interface{}); ok {
+			if n, _ := pMap["name"].(string); n == name {
+				return true
+			}
+		}
+		if pStruct, ok := p.(*arazzo1.Parameter); ok {
+			if pStruct.Name == name {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// resolveOperationByPath resolves a JSON Pointer-like operation path (e.g. #/paths/~1users/get)
+func resolveOperationByPath(doc *openapi31.OpenAPI, path string) *openapi31.Operation {
+	// Strip source prefix if present (e.g., "$source#/paths...")
+	if idx := strings.LastIndex(path, "#"); idx != -1 {
+		path = path[idx+1:]
+	}
+
+	// Expecting /paths/{path_to_item}/{method}
+	parts := strings.Split(path, "/")
+	if len(parts) < 4 || parts[1] != "paths" {
+		return nil
+	}
+
+	// Unescape JSON pointer tokens: ~1 -> /, ~0 -> ~
+	unescape := func(s string) string {
+		s = strings.ReplaceAll(s, "~1", "/")
+		s = strings.ReplaceAll(s, "~0", "~")
+		return s
+	}
+
+	pathKey := unescape(parts[2]) // The path key, e.g. /users
+	method := parts[3]            // The method, e.g. get
+
+	if doc.Paths == nil {
+		return nil
+	}
+
+	for key, pathItem := range doc.Paths.Paths {
+		if key == pathKey {
+			switch strings.ToLower(method) {
+			case "get":
+				return pathItem.Get
+			case "put":
+				return pathItem.Put
+			case "post":
+				return pathItem.Post
+			case "delete":
+				return pathItem.Delete
+			case "options":
+				return pathItem.Options
+			case "head":
+				return pathItem.Head
+			case "patch":
+				return pathItem.Patch
+			case "trace":
+				return pathItem.Trace
+			}
+		}
+	}
+
+	return nil
 }

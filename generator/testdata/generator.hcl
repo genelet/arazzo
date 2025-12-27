@@ -3,8 +3,9 @@ provider {
   server_url = "http://api.example.com"
 }
 
-http "my-op" {
-  service_type = "http"
-  path         = "/test"
-  method       = "GET"
+workflow "main" {
+  step "my-op" {
+    operation_path = "/test"
+    description    = "My Operation"
+  }
 }

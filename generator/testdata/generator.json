@@ -3,12 +3,16 @@
     "name": "test-service",
     "server_url": "http://api.example.com"
   },
-  "http": [
+  "workflows": [
     {
-      "name": "my-op",
-      "service_type": "http",
-      "path": "/test",
-      "method": "GET"
+      "workflowId": "main",
+      "steps": [
+        {
+          "name": "my-op",
+          "operationPath": "/test",
+          "description": "My Operation"
+        }
+      ]
     }
   ]
 }

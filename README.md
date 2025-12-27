@@ -699,6 +699,77 @@ func main() {
 
 **Full Round-Trip Support**: All Arazzo documents round-trip correctly through HCL, including complex cases with numeric parameter values and nested structures. Both JSON and HCL formats maintain full fidelity.
 
+## Arazzo Generator
+
+The `generator` package allows you to automatically create Arazzo specifications from existing OpenAPI 3.0/3.1 documents. It uses a configuration file to define workflows and steps, while leveraging the OpenAPI definition to enrich the output with high-fidelity details.
+
+### Features
+
+-   **Intelligent Enrichment**: Automatically populates `parameters`, `security` headers, `successCriteria`, and `requestBody` payloads from the OpenAPI definition.
+-   **Operation Resolution**: Supports referencing operations by `operationId` or JSON Pointer `operationPath` (e.g., `#/paths/~1users/get`).
+-   **Multi-Workflow Support**: Define multiple workflows in a single configuration.
+-   **Flexible Configuration**: Supports Generator configuration in YAML, JSON, or HCL formats.
+
+### Usage
+
+#### 1. Create a Generator Configuration (generator.yaml)
+
+```yaml
+provider:
+  name: petstore
+  server_url: http://petstore.swagger.io/v2
+  extensions:
+    x-env: production
+
+workflows:
+  - workflow_id: create-and-get-pet
+    summary: Create a pet and retrieve it
+    steps:
+      - name: createPet
+        operation_id: addPet
+        request_body:
+          # Payload will be auto-scaffolded from OpenAPI examples if omitted
+          content_type: application/json
+        outputs:
+          petId: $response.body.id
+      
+      - name: getPet
+        operation_path: "#/paths/~1pet~1{petId}/get"
+        parameters:
+          - name: petId
+            value: $steps.createPet.outputs.petId
+            # 'in' (path/query/header) is auto-detected from OpenAPI
+```
+
+#### 2. Generate Arazzo
+
+```go
+package main
+
+import (
+    "encoding/json"
+    "fmt"
+    "log"
+
+    "github.com/genelet/arazzo/generator"
+)
+
+func main() {
+    // Generate Arazzo from OpenAPI and Generator config
+    arazzo, err := generator.NewArazzoFromFiles(
+        "openapi.yaml",   // Path to OpenAPI definition
+        "generator.yaml", // Path to Generator configuration
+    )
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    // Output as JSON
+    bytes, _ := json.MarshalIndent(arazzo, "", "  ")
+    fmt.Println(string(bytes))
+}
+```
+
 ## Validation
 
 The `Validate()` method performs comprehensive validation:

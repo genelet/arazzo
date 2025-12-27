@@ -76,11 +76,16 @@ paths:
 		t.Errorf("expected server URL 'http://api.reverse.com', got '%s'", gen.Provider.ServerURL)
 	}
 
-	if len(gen.HTTP) != 1 {
-		t.Fatalf("expected 1 HTTP operation, got %d", len(gen.HTTP))
+	if len(gen.Workflows) != 1 {
+		t.Fatalf("expected 1 workflow, got %d", len(gen.Workflows))
+	}
+	wf := gen.Workflows[0]
+
+	if len(wf.Steps) != 1 {
+		t.Fatalf("expected 1 HTTP operation, got %d", len(wf.Steps))
 	}
 
-	op := gen.HTTP[0]
+	op := wf.Steps[0]
 	if op.Name != "getMyItem" {
 		t.Errorf("expected operation name 'getMyItem', got '%s'", op.Name)
 	}
