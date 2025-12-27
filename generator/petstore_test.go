@@ -8,6 +8,7 @@ import (
 
 	"github.com/genelet/arazzo/arazzo1"
 	"github.com/google/go-cmp/cmp"
+	"github.com/stretchr/testify/assert"
 	"gopkg.in/yaml.v3"
 )
 
@@ -87,6 +88,38 @@ func TestPetstoreRoundTrip(t *testing.T) {
 	} else {
 		t.Log("Petstore RoundTrip matched (with ignores)!")
 	}
+
+	// Sub-test: HCL Input
+	t.Run("HCL Input", func(t *testing.T) {
+		hclFile := filepath.Join(testDir, "petstore_gen.hcl")
+		// Generate from HCL
+		arazzoHCL, err := NewArazzoFromFiles(openapiFile, hclFile, "hcl")
+		assert.NoError(t, err)
+		if err != nil {
+			return
+		}
+		assert.NotNil(t, arazzoHCL)
+		if arazzoHCL == nil {
+			return
+		}
+
+		// Detailed check on new step
+		steps := arazzoHCL.Workflows[0].Steps
+		assert.Len(t, steps, 3)
+		step3 := steps[2]
+		assert.Equal(t, "placeOrderStep", step3.StepId)
+
+		// RequestBody check
+		assert.NotNil(t, step3.RequestBody)
+		t.Logf("DEBUG Payload Type: %T, Value: %+v", step3.RequestBody.Payload, step3.RequestBody.Payload)
+		payload, ok := step3.RequestBody.Payload.(map[string]interface{})
+		assert.True(t, ok, "Payload should be a map")
+
+		// Check for explicit values from HCL (petId=1, quantity=1)
+		// Use EqualValues to handle int vs float64 differences
+		assert.EqualValues(t, 1, payload["petId"], "petId should be 1")
+		assert.EqualValues(t, 1, payload["quantity"], "quantity should be 1")
+	})
 }
 
 func dumpJSON(t *testing.T, filename string, v interface{}) {

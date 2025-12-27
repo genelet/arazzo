@@ -33,7 +33,7 @@ workflows:
             - in: query
               name: password
               value: $inputs.password
-          request_body: null
+          request_body: {}
           success_criteria:
             - condition: $statusCode == 200
           on_success: []
@@ -54,7 +54,7 @@ workflows:
             - in: header
               name: Authorization
               value: $steps.loginStep.outputs.sessionToken
-          request_body: null
+          request_body: {}
           success_criteria:
             - condition: $statusCode == 200
           on_success: []
@@ -63,4 +63,23 @@ workflows:
             availablePets: $response.body
           operation_path: '{$sourceDescriptions.petStoreDescription.url}#/paths/~1pet~1findByStatus'
           operation_id: ""
+          workflow_id: ""
+        - name: placeOrderStep
+          description: Place an order for a pet
+          parameters: []
+          request_body:
+            contentType: application/json
+            payload:
+                complete: true
+                petId: 1
+                quantity: 1
+                status: placed
+          success_criteria:
+            - condition: $statusCode == 200
+          on_success: []
+          on_failure: []
+          outputs:
+            orderId: $response.body.id
+          operation_path: ""
+          operation_id: $sourceDescriptions.petStoreDescription.placeOrder
           workflow_id: ""

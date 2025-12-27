@@ -64,7 +64,8 @@ type OperationSpec struct {
 	// 2. A map/object with a "payload" key: Treated as a full RequestBody configuration (allows setting contentType, replacements).
 	//    Example: { "contentType": "application/json", "payload": "{...}" }
 	// 3. Nil/Empty: Auto-generated from OpenAPI examples.
-	RequestBody interface{} `yaml:"request_body" json:"requestBody" hcl:"request_body,block"`
+	// Note: For HCL compatibility, this must be a map. Raw strings are not supported in HCL generator input.
+	RequestBody map[string]interface{} `yaml:"request_body" json:"requestBody" hcl:"request_body,optional"`
 	// SuccessCriteria defines conditions for step success.
 	// 1. If provided: Used as is.
 	// 2. If Empty: Auto-generated from OpenAPI 2xx response codes (e.g., "$statusCode == 200").

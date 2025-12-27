@@ -168,7 +168,6 @@ func NewGeneratorFromArazzo(arazzoFile, openapiFile string) (*Generator, error) 
 				OperationId:     step.OperationId,
 				WorkflowId:      step.WorkflowId,
 				Extensions:      step.Extensions,
-				RequestBody:     step.RequestBody,
 				SuccessCriteria: step.SuccessCriteria,
 				OnSuccess:       step.OnSuccess,
 				OnFailure:       step.OnFailure,
@@ -179,6 +178,14 @@ func NewGeneratorFromArazzo(arazzoFile, openapiFile string) (*Generator, error) 
 			if len(step.Parameters) > 0 {
 				op.Parameters = make([]interface{}, len(step.Parameters))
 				copy(op.Parameters, step.Parameters)
+			}
+
+			// Copy RequestBody
+			if step.RequestBody != nil {
+				b, _ := json.Marshal(step.RequestBody)
+				var rbMap map[string]interface{}
+				_ = json.Unmarshal(b, &rbMap)
+				op.RequestBody = rbMap
 			}
 
 			spec.Steps = append(spec.Steps, op)
@@ -261,32 +268,18 @@ func (g *Generator) ToArazzo(openapiFilename string) (*arazzo1.Arazzo, error) {
 				Outputs:         op.Outputs,
 			}
 
-			// Handle RequestBody (which is now interface{})
-			if op.RequestBody != nil {
-				// 1. If it's a map/struct matching Arazzo, use it fully
-				// 2. If it's raw data, assume it's the Payload
-				if rbStruct, ok := op.RequestBody.(*arazzo1.RequestBody); ok {
-					step.RequestBody = rbStruct
-				} else if rbMap, ok := op.RequestBody.(map[string]interface{}); ok {
-					// Check if it looks like a RequestBody (has "payload" key, maybe "replacements")
-					// Use heuristics or just convert it?
-					// Actually, simpler: if user provided a map that *is* the payload, we treat it as payload.
-					// If user provided a map with "payload" key, they mean the struct.
-					// Let's assume if "payload" key exists, it is the struct.
-					if _, hasPayload := rbMap["payload"]; hasPayload {
-						// Convert map to struct ... simplistic way via JSON to avoid manual mapping
-						b, _ := json.Marshal(rbMap)
-						var rb arazzo1.RequestBody
-						_ = json.Unmarshal(b, &rb)
+			// Handle RequestBody (now map[string]interface{} for HCL compat)
+			if len(op.RequestBody) > 0 {
+				// Check for "payload" key
+				if _, hasPayload := op.RequestBody["payload"]; hasPayload {
+					// Convert map to struct via JSON (simplest way to handle conversions)
+					b, _ := json.Marshal(op.RequestBody)
+					var rb arazzo1.RequestBody
+					if err := json.Unmarshal(b, &rb); err == nil {
 						step.RequestBody = &rb
-					} else {
-						// Treat entire map as Payload
-						step.RequestBody = &arazzo1.RequestBody{
-							Payload: rbMap,
-						}
 					}
 				} else {
-					// Raw value (string, int, etc.) -> Payload
+					// Treat entirely as Payload
 					step.RequestBody = &arazzo1.RequestBody{
 						Payload: op.RequestBody,
 					}
