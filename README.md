@@ -439,6 +439,7 @@ The `generator` package allows you to automatically create Arazzo specifications
 -   **Operation Resolution**: Supports referencing operations by `operationId` or JSON Pointer `operationPath` (e.g., `#/paths/~1users/get`).
 -   **Multi-Workflow Support**: Define multiple workflows in a single configuration.
 -   **Flexible Configuration**: Supports Generator configuration in YAML, JSON, or HCL formats.
+-   **Auto-generation**: Simple string list layout for parameters (e.g. `parameters: ["id", "trace_id"]`) to automatically fetch definitions from OpenAPI.
 
 ### Usage
 
@@ -459,16 +460,20 @@ workflows:
         operation_id: addPet
         request_body:
           # Payload will be auto-scaffolded from OpenAPI examples if omitted
-          content_type: application/json
+          # Keys must match Arazzo spec (camelCase) because they map directly to RequestBody struct
+          contentType: application/json
         outputs:
           petId: $response.body.id
       
       - name: getPet
         operation_path: "#/paths/~1pet~1{petId}/get"
         parameters:
+          # Option 1: Full definition (Standard Arazzo)
           - name: petId
             value: $steps.createPet.outputs.petId
-            # 'in' (path/query/header) is auto-detected from OpenAPI
+          # Option 2: Simple String (Auto-lookup from OpenAPI)
+          # "trace-id" 
+
 ```
 
 #### 2. Generate Arazzo
@@ -498,6 +503,46 @@ func main() {
     bytes, _ := json.MarshalIndent(arazzo, "", "  ")
     fmt.Println(string(bytes))
 }
+```
+
+#### 3. Using HCL Configuration (generator.hcl)
+
+```hcl
+provider "petstore" {
+  server_url = "http://petstore.swagger.io/v2"
+}
+
+workflow "create-and-get-pet" {
+  summary = "Create a pet and retrieve it"
+  
+  step "createPet" {
+    operation_id = "addPet"
+    
+    # Request body can be assigned as a map
+    request_body = {
+      contentType = "application/json"
+      # payload = { ... } # Optional explicit payload
+    }
+
+    outputs {
+      petId = "$response.body.id"
+    }
+  }
+
+  step "getPet" {
+    operation_path = "#/paths/~1pet~1{petId}/get"
+    
+    parameter {
+      name  = "petId"
+      value = "$steps.createPet.outputs.petId"
+    }
+  }
+}
+```
+
+```go
+// Use "hcl" as format argument
+arazzo, err := generator.NewArazzoFromFiles("openapi.yaml", "generator.hcl", "hcl")
 ```
 
 ## Validation

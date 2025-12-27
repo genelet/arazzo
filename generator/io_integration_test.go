@@ -134,9 +134,9 @@ func TestGenerator_ToArazzo_DataAssignments(t *testing.T) {
 							},
 						},
 						// RequestBody: Explicit payload assignment
-						RequestBody: &arazzo1.RequestBody{
-							ContentType: "application/json",
-							Payload:     `{"status": "active"}`,
+						RequestBody: map[string]interface{}{
+							"contentType": "application/json",
+							"payload":     `{"status": "active"}`,
 						},
 					},
 				},
