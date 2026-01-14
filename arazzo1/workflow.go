@@ -315,6 +315,24 @@ func parseSuccessActionBlock(block *hclsyntax.Block, action *SuccessAction) erro
 			action.StepId = val.AsString()
 		}
 	}
+	for _, nestedBlock := range block.Body.Blocks {
+		switch nestedBlock.Type {
+		case "criterion":
+			criterion := &Criterion{}
+			if err := parseCriterionBlock(nestedBlock, criterion); err != nil {
+				errs = append(errs, fmt.Sprintf("criterion: %s", err.Error()))
+				continue
+			}
+			action.Criteria = append(action.Criteria, criterion)
+		case "successAction":
+			if len(nestedBlock.Labels) > 0 {
+				action.Name = nestedBlock.Labels[0]
+			}
+			if err := parseSuccessActionBlock(nestedBlock, action); err != nil {
+				errs = append(errs, fmt.Sprintf("successAction: %s", err.Error()))
+			}
+		}
+	}
 	if len(errs) > 0 {
 		return fmt.Errorf("success action errors: %s", strings.Join(errs, "; "))
 	}
@@ -352,6 +370,24 @@ func parseFailureActionBlock(block *hclsyntax.Block, action *FailureAction) erro
 			}
 			i := int(f)
 			action.RetryLimit = &i
+		}
+	}
+	for _, nestedBlock := range block.Body.Blocks {
+		switch nestedBlock.Type {
+		case "criterion":
+			criterion := &Criterion{}
+			if err := parseCriterionBlock(nestedBlock, criterion); err != nil {
+				errs = append(errs, fmt.Sprintf("criterion: %s", err.Error()))
+				continue
+			}
+			action.Criteria = append(action.Criteria, criterion)
+		case "failureAction":
+			if len(nestedBlock.Labels) > 0 {
+				action.Name = nestedBlock.Labels[0]
+			}
+			if err := parseFailureActionBlock(nestedBlock, action); err != nil {
+				errs = append(errs, fmt.Sprintf("failureAction: %s", err.Error()))
+			}
 		}
 	}
 	if len(errs) > 0 {
@@ -430,21 +466,39 @@ func parseStepBlock(block *hclsyntax.Block, s *Step) error {
 			}
 			s.SuccessCriteria = append(s.SuccessCriteria, criterion)
 		case "onSuccess":
-			action := &SuccessActionOrReusable{SuccessAction: &SuccessAction{}}
-			if len(nestedBlock.Labels) > 0 {
-				action.SuccessAction.Name = nestedBlock.Labels[0]
-			}
-			if err := parseSuccessActionBlock(nestedBlock, action.SuccessAction); err != nil {
-				errs = append(errs, fmt.Sprintf("onSuccess: %s", err.Error()))
+			action := &SuccessActionOrReusable{}
+			if reusable, ok, err := parseReusableFromBlock(nestedBlock); ok {
+				if err != nil {
+					errs = append(errs, fmt.Sprintf("onSuccess reusable: %s", err.Error()))
+					break
+				}
+				action.Reusable = reusable
+			} else {
+				action.SuccessAction = &SuccessAction{}
+				if len(nestedBlock.Labels) > 0 {
+					action.SuccessAction.Name = nestedBlock.Labels[0]
+				}
+				if err := parseSuccessActionBlock(nestedBlock, action.SuccessAction); err != nil {
+					errs = append(errs, fmt.Sprintf("onSuccess: %s", err.Error()))
+				}
 			}
 			s.OnSuccess = append(s.OnSuccess, action)
 		case "onFailure":
-			action := &FailureActionOrReusable{FailureAction: &FailureAction{}}
-			if len(nestedBlock.Labels) > 0 {
-				action.FailureAction.Name = nestedBlock.Labels[0]
-			}
-			if err := parseFailureActionBlock(nestedBlock, action.FailureAction); err != nil {
-				errs = append(errs, fmt.Sprintf("onFailure: %s", err.Error()))
+			action := &FailureActionOrReusable{}
+			if reusable, ok, err := parseReusableFromBlock(nestedBlock); ok {
+				if err != nil {
+					errs = append(errs, fmt.Sprintf("onFailure reusable: %s", err.Error()))
+					break
+				}
+				action.Reusable = reusable
+			} else {
+				action.FailureAction = &FailureAction{}
+				if len(nestedBlock.Labels) > 0 {
+					action.FailureAction.Name = nestedBlock.Labels[0]
+				}
+				if err := parseFailureActionBlock(nestedBlock, action.FailureAction); err != nil {
+					errs = append(errs, fmt.Sprintf("onFailure: %s", err.Error()))
+				}
 			}
 			s.OnFailure = append(s.OnFailure, action)
 		}
@@ -452,6 +506,56 @@ func parseStepBlock(block *hclsyntax.Block, s *Step) error {
 
 	if len(errs) > 0 {
 		return fmt.Errorf("step %q errors: %s", s.StepId, strings.Join(errs, "; "))
+	}
+	return nil
+}
+
+func parseReusableFromBlock(block *hclsyntax.Block) (*ReusableObject, bool, error) {
+	for _, nestedBlock := range block.Body.Blocks {
+		if nestedBlock.Type != "reusable" {
+			continue
+		}
+		reusable := &ReusableObject{}
+		if err := parseReusableBody(nestedBlock.Body, reusable); err != nil {
+			return reusable, true, err
+		}
+		return reusable, true, nil
+	}
+
+	if _, ok := block.Body.Attributes["reference"]; ok {
+		reusable := &ReusableObject{}
+		if err := parseReusableBody(block.Body, reusable); err != nil {
+			return reusable, true, err
+		}
+		return reusable, true, nil
+	}
+
+	return nil, false, nil
+}
+
+func parseReusableBody(body *hclsyntax.Body, reusable *ReusableObject) error {
+	var errs []string
+	for name, attr := range body.Attributes {
+		val, diags := attr.Expr.Value(nil)
+		if diags.HasErrors() {
+			errs = append(errs, fmt.Sprintf("attribute %q: %s", name, diags.Error()))
+			continue
+		}
+		switch name {
+		case "reference":
+			reusable.Reference = val.AsString()
+		case "value":
+			reusable.Value = ctyToGo(val)
+		}
+	}
+	for _, nestedBlock := range body.Blocks {
+		if nestedBlock.Type != "value" {
+			continue
+		}
+		reusable.Value = hclBlockToMap(nestedBlock)
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("reusable errors: %s", strings.Join(errs, "; "))
 	}
 	return nil
 }
@@ -474,8 +578,16 @@ func parseRequestBodyBlock(block *hclsyntax.Block, rb *RequestBody) error {
 	}
 	// Handle payload block
 	for _, nestedBlock := range block.Body.Blocks {
-		if nestedBlock.Type == "payload" {
+		switch nestedBlock.Type {
+		case "payload":
 			rb.Payload = hclBlockToMap(nestedBlock)
+		case "replacement":
+			replacement := &PayloadReplacement{}
+			if err := parsePayloadReplacementBlock(nestedBlock, replacement); err != nil {
+				errs = append(errs, fmt.Sprintf("replacement: %s", err.Error()))
+				continue
+			}
+			rb.Replacements = append(rb.Replacements, replacement)
 		}
 	}
 	if len(errs) > 0 {
@@ -484,9 +596,32 @@ func parseRequestBodyBlock(block *hclsyntax.Block, rb *RequestBody) error {
 	return nil
 }
 
+func parsePayloadReplacementBlock(block *hclsyntax.Block, replacement *PayloadReplacement) error {
+	var errs []string
+	for name, attr := range block.Body.Attributes {
+		val, diags := attr.Expr.Value(nil)
+		if diags.HasErrors() {
+			errs = append(errs, fmt.Sprintf("attribute %q: %s", name, diags.Error()))
+			continue
+		}
+		switch name {
+		case "target":
+			replacement.Target = val.AsString()
+		case "value":
+			replacement.Value = val.AsString()
+		}
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("replacement errors: %s", strings.Join(errs, "; "))
+	}
+	return nil
+}
+
 // parseCriterionBlock parses HCL block into Criterion
 func parseCriterionBlock(block *hclsyntax.Block, c *Criterion) error {
 	var errs []string
+	var version string
+	var exprType *CriterionExpressionType
 	for name, attr := range block.Body.Attributes {
 		val, diags := attr.Expr.Value(nil)
 		if diags.HasErrors() {
@@ -500,10 +635,59 @@ func parseCriterionBlock(block *hclsyntax.Block, c *Criterion) error {
 			c.Condition = val.AsString()
 		case "type":
 			c.Type = CriterionType(val.AsString())
+		case "version":
+			version = val.AsString()
 		}
+	}
+	for _, nestedBlock := range block.Body.Blocks {
+		if nestedBlock.Type != "expressionType" {
+			continue
+		}
+		exprType = &CriterionExpressionType{}
+		if err := parseCriterionExpressionTypeBlock(nestedBlock, exprType); err != nil {
+			errs = append(errs, fmt.Sprintf("expressionType: %s", err.Error()))
+		}
+	}
+	if version != "" {
+		if exprType != nil {
+			errs = append(errs, "expressionType block and version attribute both set")
+		} else if c.Type == "" {
+			errs = append(errs, "version requires type")
+		} else {
+			c.ExpressionType = &CriterionExpressionType{
+				Type:    c.Type,
+				Version: version,
+			}
+			c.Type = ""
+		}
+	}
+	if exprType != nil {
+		c.ExpressionType = exprType
+		c.Type = ""
 	}
 	if len(errs) > 0 {
 		return fmt.Errorf("criterion errors: %s", strings.Join(errs, "; "))
+	}
+	return nil
+}
+
+func parseCriterionExpressionTypeBlock(block *hclsyntax.Block, expr *CriterionExpressionType) error {
+	var errs []string
+	for name, attr := range block.Body.Attributes {
+		val, diags := attr.Expr.Value(nil)
+		if diags.HasErrors() {
+			errs = append(errs, fmt.Sprintf("attribute %q: %s", name, diags.Error()))
+			continue
+		}
+		switch name {
+		case "type":
+			expr.Type = CriterionType(val.AsString())
+		case "version":
+			expr.Version = val.AsString()
+		}
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("expressionType errors: %s", strings.Join(errs, "; "))
 	}
 	return nil
 }

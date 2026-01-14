@@ -8,8 +8,8 @@ github.com/bmatcuk/doublestar v1.3.4 h1:gPypJ5xD31uhX6Tf54sDPUOBXTqKH4c9aPY66CyQ
 github.com/bmatcuk/doublestar v1.3.4/go.mod h1:wiQtGV+rzVYxB7WIlirSN++5HPtPlXEo9MEoZQC/PmE=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
-github.com/genelet/horizon v1.13.5-0.20251209130657-d15ae2cd06ae h1:1O0oxc2OKb/h4q4COOzTIEZdAaLx4ViDSD7lGglvZl8=
-github.com/genelet/horizon v1.13.5-0.20251209130657-d15ae2cd06ae/go.mod h1:mJPVzZ5+fogvaIi61QS1nUZBMai0xaA22R/qlbZdu/w=
+github.com/genelet/horizon v1.14.0 h1:9Mdt/Ap7YJn0v+RS0lq2kjWWedYCm8eRxPvbYMDgtkI=
+github.com/genelet/horizon v1.14.0/go.mod h1:mJPVzZ5+fogvaIi61QS1nUZBMai0xaA22R/qlbZdu/w=
 github.com/genelet/oas v0.0.0-20251209172154-2e3e4a13646b h1:64fvOUfBZQUsGdINiA8MQa1y6Ybst4tW9gtKuwvHFko=
 github.com/genelet/oas v0.0.0-20251209172154-2e3e4a13646b/go.mod h1:DnQIWAYjrckHkuYCdYa6nZ3HlQ9aUaK++CKZ0KbT6DM=
 github.com/genelet/schema v0.0.0-20251203212046-4a325f33cf8e h1:oBz67i9esRNHLd1vAwS0m7fPcXccKc0+djpQuhju2rU=

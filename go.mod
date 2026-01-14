@@ -3,7 +3,7 @@ module github.com/genelet/arazzo
 go 1.25.4
 
 require (
-	github.com/genelet/horizon v1.13.5-0.20251209130657-d15ae2cd06ae
+	github.com/genelet/horizon v1.14.0
 	github.com/genelet/oas v0.0.0-20251209172154-2e3e4a13646b
 	github.com/google/go-cmp v0.7.0
 	github.com/hashicorp/hcl/v2 v2.24.0

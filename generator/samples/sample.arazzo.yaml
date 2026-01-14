@@ -1,11 +1,11 @@
 arazzo: 1.0.0
 info:
     title: Generated Arazzo from Comprehensive Sample API
-    summary: Generated from /home/peter/Working/arazzo/generator/samples/sample.openapi.yaml
+    summary: Generated from /home/peter/Workspace/arazzo/generator/samples/sample.openapi.yaml
     version: 1.0.0
 sourceDescriptions:
     - name: sample-provider
-      url: /home/peter/Working/arazzo/generator/samples/sample.openapi.yaml
+      url: /home/peter/Workspace/arazzo/generator/samples/sample.openapi.yaml
       type: openapi
 workflows:
     - workflowId: full-demo-workflow

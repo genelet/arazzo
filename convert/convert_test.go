@@ -250,6 +250,288 @@ func TestComplexWorkflowConversion(t *testing.T) {
 	}
 }
 
+func TestRoundTripPreservesCriteriaAndReplacements(t *testing.T) {
+	doc := &arazzo1.Arazzo{
+		Arazzo: "1.0.0",
+		Info: &arazzo1.Info{
+			Title:   "Test",
+			Version: "1.0.0",
+		},
+		SourceDescriptions: []*arazzo1.SourceDescription{
+			{
+				Name: "api",
+				URL:  "./openapi.json",
+				Type: arazzo1.SourceDescriptionTypeOpenAPI,
+			},
+		},
+		Workflows: []*arazzo1.Workflow{
+			{
+				WorkflowId: "workflow",
+				Steps: []*arazzo1.Step{
+					{
+						StepId:      "step1",
+						OperationId: "getUser",
+						SuccessCriteria: []*arazzo1.Criterion{
+							{
+								Condition: "$.status",
+								ExpressionType: &arazzo1.CriterionExpressionType{
+									Type:    arazzo1.CriterionTypeJSONPath,
+									Version: "draft-goessner-dispatch-jsonpath-00",
+								},
+							},
+						},
+						OnSuccess: []*arazzo1.SuccessActionOrReusable{
+							{
+								SuccessAction: &arazzo1.SuccessAction{
+									Name:   "continue",
+									Type:   arazzo1.SuccessActionTypeGoto,
+									StepId: "nextStep",
+									Criteria: []*arazzo1.Criterion{
+										{
+											Condition: "$statusCode == 200",
+											Type:      arazzo1.CriterionTypeSimple,
+										},
+									},
+								},
+							},
+						},
+						RequestBody: &arazzo1.RequestBody{
+							ContentType: "application/json",
+							Payload: map[string]any{
+								"name": "test",
+							},
+							Replacements: []*arazzo1.PayloadReplacement{
+								{
+									Target: "/name",
+									Value:  "override",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	jsonData, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatalf("Failed to marshal to JSON: %v", err)
+	}
+
+	hclData, err := JSONToHCL(jsonData)
+	if err != nil {
+		t.Fatalf("JSONToHCL failed: %v", err)
+	}
+
+	jsonData2, err := HCLToJSON(hclData)
+	if err != nil {
+		t.Fatalf("HCLToJSON failed: %v", err)
+	}
+
+	var doc2 arazzo1.Arazzo
+	if err := json.Unmarshal(jsonData2, &doc2); err != nil {
+		t.Fatalf("Failed to parse JSON output: %v", err)
+	}
+
+	step := doc2.Workflows[0].Steps[0]
+	if len(step.SuccessCriteria) != 1 {
+		t.Fatalf("Expected 1 success criterion, got %d", len(step.SuccessCriteria))
+	}
+	if step.SuccessCriteria[0].ExpressionType == nil {
+		t.Fatal("Expected expression type to be preserved")
+	}
+	if step.SuccessCriteria[0].ExpressionType.Version != "draft-goessner-dispatch-jsonpath-00" {
+		t.Errorf("Expected expression type version to be preserved, got %q", step.SuccessCriteria[0].ExpressionType.Version)
+	}
+
+	if len(step.OnSuccess) != 1 || step.OnSuccess[0].SuccessAction == nil {
+		t.Fatal("Expected onSuccess action to be preserved")
+	}
+	if len(step.OnSuccess[0].SuccessAction.Criteria) != 1 {
+		t.Fatalf("Expected 1 onSuccess criterion, got %d", len(step.OnSuccess[0].SuccessAction.Criteria))
+	}
+
+	if step.RequestBody == nil {
+		t.Fatal("Expected requestBody to be preserved")
+	}
+	if len(step.RequestBody.Replacements) != 1 {
+		t.Fatalf("Expected 1 replacement, got %d", len(step.RequestBody.Replacements))
+	}
+	if step.RequestBody.Replacements[0].Target != "/name" {
+		t.Errorf("Expected replacement target '/name', got %q", step.RequestBody.Replacements[0].Target)
+	}
+}
+
+func TestHCLConversionPreservesDollarKeys(t *testing.T) {
+	jsonData := []byte(`{
+		"arazzo": "1.0.0",
+		"info": {
+			"title": "Dollar Key Workflow",
+			"version": "1.0.0"
+		},
+		"sourceDescriptions": [
+			{
+				"name": "api",
+				"url": "./openapi.json",
+				"type": "openapi"
+			}
+		],
+		"workflows": [
+			{
+				"workflowId": "workflow",
+				"inputs": {
+					"$custom": {
+						"type": "string"
+					},
+					"regular": {
+						"type": "string"
+					}
+				},
+				"steps": [
+					{
+						"stepId": "step1",
+						"operationId": "getUser",
+						"requestBody": {
+							"contentType": "application/json",
+							"payload": {
+								"$meta": {
+									"id": 1
+								},
+								"name": "test"
+							}
+						}
+					}
+				]
+			}
+		]
+	}`)
+
+	hclData, err := JSONToHCL(jsonData)
+	if err != nil {
+		t.Fatalf("JSONToHCL failed: %v", err)
+	}
+
+	hclStr := string(hclData)
+	if !strings.Contains(hclStr, "__dollar__custom") {
+		t.Error("HCL output missing transformed $custom key")
+	}
+	if !strings.Contains(hclStr, "__dollar__meta") {
+		t.Error("HCL output missing transformed $meta key")
+	}
+
+	jsonData2, err := HCLToJSON(hclData)
+	if err != nil {
+		t.Fatalf("HCLToJSON failed: %v", err)
+	}
+
+	var doc arazzo1.Arazzo
+	if err := json.Unmarshal(jsonData2, &doc); err != nil {
+		t.Fatalf("Failed to parse JSON output: %v", err)
+	}
+
+	inputs, ok := doc.Workflows[0].Inputs.(map[string]any)
+	if !ok {
+		t.Fatalf("Expected inputs to be map[string]any, got %T", doc.Workflows[0].Inputs)
+	}
+	if _, ok := inputs["$custom"]; !ok {
+		t.Error("Expected $custom key in inputs after round-trip")
+	}
+
+	step := doc.Workflows[0].Steps[0]
+	if step.RequestBody == nil {
+		t.Fatal("Expected requestBody to be preserved")
+	}
+	payload, ok := step.RequestBody.Payload.(map[string]any)
+	if !ok {
+		t.Fatalf("Expected payload to be map[string]any, got %T", step.RequestBody.Payload)
+	}
+	if _, ok := payload["$meta"]; !ok {
+		t.Error("Expected $meta key in payload after round-trip")
+	}
+}
+
+func TestRoundTripPreservesReusableActions(t *testing.T) {
+	doc := &arazzo1.Arazzo{
+		Arazzo: "1.0.0",
+		Info: &arazzo1.Info{
+			Title:   "Reusable Actions",
+			Version: "1.0.0",
+		},
+		SourceDescriptions: []*arazzo1.SourceDescription{
+			{
+				Name: "api",
+				URL:  "./openapi.json",
+				Type: arazzo1.SourceDescriptionTypeOpenAPI,
+			},
+		},
+		Workflows: []*arazzo1.Workflow{
+			{
+				WorkflowId: "workflow",
+				Steps: []*arazzo1.Step{
+					{
+						StepId:      "step1",
+						OperationId: "getUser",
+						OnSuccess: []*arazzo1.SuccessActionOrReusable{
+							{
+								Reusable: &arazzo1.ReusableObject{
+									Reference: "$components.successActions.LogSuccess",
+								},
+							},
+						},
+						OnFailure: []*arazzo1.FailureActionOrReusable{
+							{
+								Reusable: &arazzo1.ReusableObject{
+									Reference: "$components.failureActions.RetryOnce",
+									Value: map[string]any{
+										"retryLimit": 5,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	jsonData, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatalf("Failed to marshal to JSON: %v", err)
+	}
+
+	hclData, err := JSONToHCL(jsonData)
+	if err != nil {
+		t.Fatalf("JSONToHCL failed: %v", err)
+	}
+
+	jsonData2, err := HCLToJSON(hclData)
+	if err != nil {
+		t.Fatalf("HCLToJSON failed: %v", err)
+	}
+
+	var doc2 arazzo1.Arazzo
+	if err := json.Unmarshal(jsonData2, &doc2); err != nil {
+		t.Fatalf("Failed to parse JSON output: %v", err)
+	}
+
+	step := doc2.Workflows[0].Steps[0]
+	if len(step.OnSuccess) != 1 || step.OnSuccess[0].Reusable == nil {
+		t.Fatal("Expected reusable onSuccess action to be preserved")
+	}
+	if step.OnSuccess[0].Reusable.Reference != "$components.successActions.LogSuccess" {
+		t.Errorf("Expected onSuccess reusable reference to be preserved, got %q", step.OnSuccess[0].Reusable.Reference)
+	}
+	if len(step.OnFailure) != 1 || step.OnFailure[0].Reusable == nil {
+		t.Fatal("Expected reusable onFailure action to be preserved")
+	}
+	if step.OnFailure[0].Reusable.Reference != "$components.failureActions.RetryOnce" {
+		t.Errorf("Expected onFailure reusable reference to be preserved, got %q", step.OnFailure[0].Reusable.Reference)
+	}
+	if step.OnFailure[0].Reusable.Value == nil {
+		t.Fatal("Expected onFailure reusable value override to be preserved")
+	}
+}
+
 func TestHCLToJSONIndent(t *testing.T) {
 	hclData := []byte(`
 arazzo = "1.0.0"

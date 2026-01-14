@@ -128,6 +128,63 @@ step "createUser" {
 	}
 }
 
+func TestUnmarshalHCLWithRequestBodyReplacements(t *testing.T) {
+	hclData := `
+step "createUser" {
+  operationId = "createUser"
+
+  requestBody {
+    contentType = "application/json"
+    payload = {
+      name = "test"
+    }
+
+    replacement {
+      target = "/name"
+      value = "replace"
+    }
+
+    replacement {
+      target = "/active"
+      value = "true"
+    }
+  }
+}
+`
+
+	w := &Workflow{}
+	err := w.UnmarshalHCL([]byte(hclData), "test-workflow")
+	if err != nil {
+		t.Fatalf("UnmarshalHCL failed: %v", err)
+	}
+
+	if len(w.Steps) != 1 {
+		t.Fatalf("Expected 1 step, got %d", len(w.Steps))
+	}
+
+	step := w.Steps[0]
+	if step.RequestBody == nil {
+		t.Fatal("Expected requestBody")
+	}
+
+	if len(step.RequestBody.Replacements) != 2 {
+		t.Fatalf("Expected 2 replacements, got %d", len(step.RequestBody.Replacements))
+	}
+
+	if step.RequestBody.Replacements[0].Target != "/name" {
+		t.Errorf("Expected first target '/name', got %q", step.RequestBody.Replacements[0].Target)
+	}
+	if step.RequestBody.Replacements[0].Value != "replace" {
+		t.Errorf("Expected first value 'replace', got %q", step.RequestBody.Replacements[0].Value)
+	}
+	if step.RequestBody.Replacements[1].Target != "/active" {
+		t.Errorf("Expected second target '/active', got %q", step.RequestBody.Replacements[1].Target)
+	}
+	if step.RequestBody.Replacements[1].Value != "true" {
+		t.Errorf("Expected second value 'true', got %q", step.RequestBody.Replacements[1].Value)
+	}
+}
+
 func TestUnmarshalHCLWithSuccessCriteria(t *testing.T) {
 	hclData := `
 step "checkStatus" {
@@ -175,6 +232,65 @@ step "checkStatus" {
 	}
 	if step.SuccessCriteria[1].Type != CriterionTypeJSONPath {
 		t.Errorf("Expected type 'jsonpath', got %q", step.SuccessCriteria[1].Type)
+	}
+}
+
+func TestUnmarshalHCLWithCriterionExpressionType(t *testing.T) {
+	hclData := `
+step "checkStatus" {
+  operationId = "getStatus"
+
+  successCriterion {
+    condition = "$.status"
+    expressionType {
+      type = "jsonpath"
+      version = "draft-goessner-dispatch-jsonpath-00"
+    }
+  }
+
+  successCriterion {
+    condition = "$.status"
+    type = "xpath"
+    version = "xpath-20"
+  }
+}
+`
+
+	w := &Workflow{}
+	err := w.UnmarshalHCL([]byte(hclData), "test-workflow")
+	if err != nil {
+		t.Fatalf("UnmarshalHCL failed: %v", err)
+	}
+
+	if len(w.Steps) != 1 {
+		t.Fatalf("Expected 1 step, got %d", len(w.Steps))
+	}
+
+	step := w.Steps[0]
+	if len(step.SuccessCriteria) != 2 {
+		t.Fatalf("Expected 2 success criteria, got %d", len(step.SuccessCriteria))
+	}
+
+	first := step.SuccessCriteria[0]
+	if first.ExpressionType == nil {
+		t.Fatal("Expected expression type on first criterion")
+	}
+	if first.ExpressionType.Type != CriterionTypeJSONPath {
+		t.Errorf("Expected first expression type 'jsonpath', got %q", first.ExpressionType.Type)
+	}
+	if first.ExpressionType.Version != "draft-goessner-dispatch-jsonpath-00" {
+		t.Errorf("Expected first expression version 'draft-goessner-dispatch-jsonpath-00', got %q", first.ExpressionType.Version)
+	}
+
+	second := step.SuccessCriteria[1]
+	if second.ExpressionType == nil {
+		t.Fatal("Expected expression type on second criterion")
+	}
+	if second.ExpressionType.Type != CriterionTypeXPath {
+		t.Errorf("Expected second expression type 'xpath', got %q", second.ExpressionType.Type)
+	}
+	if second.ExpressionType.Version != "xpath-20" {
+		t.Errorf("Expected second expression version 'xpath-20', got %q", second.ExpressionType.Version)
 	}
 }
 
@@ -249,6 +365,122 @@ step "process" {
 	endAction := step.OnFailure[1].FailureAction
 	if endAction.Type != FailureActionTypeEnd {
 		t.Errorf("Expected type 'end', got %q", endAction.Type)
+	}
+}
+
+func TestUnmarshalHCLWithActionCriteria(t *testing.T) {
+	hclData := `
+step "process" {
+  operationId = "processItem"
+
+  onSuccess "continue" {
+    type = "goto"
+    stepId = "nextStep"
+
+    criterion {
+      condition = "$statusCode == 200"
+      type = "simple"
+    }
+  }
+
+  onFailure "retry" {
+    type = "retry"
+    retryLimit = 3
+
+    criterion {
+      condition = "$statusCode == 500"
+      type = "simple"
+    }
+  }
+}
+`
+
+	w := &Workflow{}
+	err := w.UnmarshalHCL([]byte(hclData), "test-workflow")
+	if err != nil {
+		t.Fatalf("UnmarshalHCL failed: %v", err)
+	}
+
+	if len(w.Steps) != 1 {
+		t.Fatalf("Expected 1 step, got %d", len(w.Steps))
+	}
+
+	step := w.Steps[0]
+	if len(step.OnSuccess) != 1 {
+		t.Fatalf("Expected 1 onSuccess action, got %d", len(step.OnSuccess))
+	}
+	if len(step.OnSuccess[0].SuccessAction.Criteria) != 1 {
+		t.Fatalf("Expected 1 onSuccess criterion, got %d", len(step.OnSuccess[0].SuccessAction.Criteria))
+	}
+	if step.OnSuccess[0].SuccessAction.Criteria[0].Condition != "$statusCode == 200" {
+		t.Errorf("Expected onSuccess condition '$statusCode == 200', got %q", step.OnSuccess[0].SuccessAction.Criteria[0].Condition)
+	}
+
+	if len(step.OnFailure) != 1 {
+		t.Fatalf("Expected 1 onFailure action, got %d", len(step.OnFailure))
+	}
+	if len(step.OnFailure[0].FailureAction.Criteria) != 1 {
+		t.Fatalf("Expected 1 onFailure criterion, got %d", len(step.OnFailure[0].FailureAction.Criteria))
+	}
+	if step.OnFailure[0].FailureAction.Criteria[0].Condition != "$statusCode == 500" {
+		t.Errorf("Expected onFailure condition '$statusCode == 500', got %q", step.OnFailure[0].FailureAction.Criteria[0].Condition)
+	}
+}
+
+func TestUnmarshalHCLWithReusableActions(t *testing.T) {
+	hclData := `
+step "process" {
+  operationId = "processItem"
+
+  onSuccess {
+    reusable {
+      reference = "$components.successActions.LogSuccess"
+    }
+  }
+
+  onFailure {
+    reusable {
+      reference = "$components.failureActions.RetryOnce"
+      value {
+        retryLimit = 5
+      }
+    }
+  }
+}
+`
+
+	w := &Workflow{}
+	err := w.UnmarshalHCL([]byte(hclData), "test-workflow")
+	if err != nil {
+		t.Fatalf("UnmarshalHCL failed: %v", err)
+	}
+
+	if len(w.Steps) != 1 {
+		t.Fatalf("Expected 1 step, got %d", len(w.Steps))
+	}
+
+	step := w.Steps[0]
+	if len(step.OnSuccess) != 1 {
+		t.Fatalf("Expected 1 onSuccess action, got %d", len(step.OnSuccess))
+	}
+	if step.OnSuccess[0].Reusable == nil {
+		t.Fatal("Expected reusable onSuccess action")
+	}
+	if step.OnSuccess[0].Reusable.Reference != "$components.successActions.LogSuccess" {
+		t.Errorf("Expected onSuccess reference '$components.successActions.LogSuccess', got %q", step.OnSuccess[0].Reusable.Reference)
+	}
+
+	if len(step.OnFailure) != 1 {
+		t.Fatalf("Expected 1 onFailure action, got %d", len(step.OnFailure))
+	}
+	if step.OnFailure[0].Reusable == nil {
+		t.Fatal("Expected reusable onFailure action")
+	}
+	if step.OnFailure[0].Reusable.Reference != "$components.failureActions.RetryOnce" {
+		t.Errorf("Expected onFailure reference '$components.failureActions.RetryOnce', got %q", step.OnFailure[0].Reusable.Reference)
+	}
+	if step.OnFailure[0].Reusable.Value == nil {
+		t.Fatal("Expected onFailure reusable value override")
 	}
 }
 

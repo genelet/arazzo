@@ -9,13 +9,50 @@ import (
 	"github.com/genelet/horizon/dethcl"
 )
 
+const hclDollarKeyPrefix = "__dollar__"
+
+var legacyDollarKeys = map[string]struct{}{
+	"$ref":           {},
+	"$id":            {},
+	"$schema":        {},
+	"$defs":          {},
+	"$comment":       {},
+	"$vocabulary":    {},
+	"$anchor":        {},
+	"$dynamicRef":    {},
+	"$dynamicAnchor": {},
+}
+
+func toHCLKey(key string) string {
+	if !strings.HasPrefix(key, "$") {
+		return key
+	}
+	if _, ok := legacyDollarKeys[key]; ok {
+		return "_" + key[1:]
+	}
+	return hclDollarKeyPrefix + key[1:]
+}
+
+func fromHCLKey(key string) string {
+	if strings.HasPrefix(key, hclDollarKeyPrefix) {
+		return "$" + key[len(hclDollarKeyPrefix):]
+	}
+	if strings.HasPrefix(key, "_") {
+		candidate := "$" + key[1:]
+		if _, ok := legacyDollarKeys[candidate]; ok {
+			return candidate
+		}
+	}
+	return key
+}
+
 // transformValue recursively transforms values for HCL compatibility.
 // When toHCL is true:
-//   - Converts $ref to _ref ($ not valid in HCL identifiers)
+//   - Converts $-prefixed keys to HCL-safe identifiers
 //   - Escapes newlines in strings (HCL quoted strings cannot span multiple lines)
 //
 // When toHCL is false:
-//   - Converts _ref back to $ref
+//   - Converts HCL-safe identifiers back to $-prefixed keys
 //   - Unescapes newlines in strings
 func transformValue(v any, toHCL bool) any {
 	switch val := v.(type) {
@@ -30,15 +67,10 @@ func transformValue(v any, toHCL bool) any {
 		result := make(map[string]any)
 		for k, v := range val {
 			newKey := k
-			if toHCL && strings.HasPrefix(k, "$") {
-				newKey = "_" + k[1:]
-			} else if !toHCL && strings.HasPrefix(k, "_") {
-				// Check if this looks like a transformed $ref key
-				// Common JSON Schema keys that start with $: $ref, $id, $schema, $defs, $comment, $vocabulary
-				switch k {
-				case "_ref", "_id", "_schema", "_defs", "_comment", "_vocabulary", "_anchor", "_dynamicRef", "_dynamicAnchor":
-					newKey = "$" + k[1:]
-				}
+			if toHCL {
+				newKey = toHCLKey(k)
+			} else {
+				newKey = fromHCLKey(k)
 			}
 			result[newKey] = transformValue(v, toHCL)
 		}
